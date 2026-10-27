@@ -263,6 +263,8 @@ class MainActivity : Activity() {
 
     private fun footer(): View {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val ver = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: "?"
+        box.addView(text("Cinder Phone version $ver", DUST).also { it.setPadding(0, 0, 0, dp(14)) })
         if (Setup.isManaged(this)) {
             box.addView(text("Cinder manages this phone. Releasing it stops Cinder and gives the phone back. A factory reset afterwards leaves it like new.", DUST))
             box.addView(button("Release this phone") {
