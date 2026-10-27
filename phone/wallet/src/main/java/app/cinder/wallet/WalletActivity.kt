@@ -52,6 +52,58 @@ class WalletActivity : Activity() {
         body = column(20).apply { setPadding(dp(20), dp(20), dp(20), dp(36)) }
         setContentView(ScrollView(this).apply { setBackgroundColor(Ui.INK); isFillViewport = true; addView(body); padForSystemBars() })
         if (wallet.hasCard) home() else welcome()
+        handleLink(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); handleLink(intent) }
+
+    /** cinderpay://import?words=… : a card sent from the website. */
+    private fun handleLink(i: Intent?) {
+        val data = i?.dataString ?: return
+        if (!data.startsWith("cinderpay://import")) return
+        i.data = null
+        importCard(data)
+    }
+
+    /** Words from a link or a scanned code (`…#import=word.word…` or `cinderpay://import?words=word.word…`), or null. */
+    private fun entropyFromLink(text: String): ByteArray? {
+        val m = Regex("(?:import=|words=)([a-z.]+)").find(text) ?: return null
+        return try { Core.entropyFromPhrase(m.groupValues[1].split('.').joinToString(" "), wallet.words) } catch (_: Exception) { null }
+    }
+
+    private fun importCard(text: String) {
+        val ent = entropyFromLink(text)
+        if (ent == null) { Toast.makeText(this, "That card link isn't right. Try Use on another device again.", Toast.LENGTH_LONG).show(); return }
+        val id = Core.keysFromEntropy(ent).id
+        when {
+            wallet.hasCard && wallet.id == id -> Toast.makeText(this, "That card is already on this phone.", Toast.LENGTH_LONG).show()
+            wallet.hasCard -> AlertDialog.Builder(this).setTitle("Replace the card on this phone?")
+                .setMessage("This phone has ${Core.formatId(wallet.id)}. Adding ${Core.formatId(id)} removes it from here. Without its 12 words, the CDR on it is gone for good.")
+                .setPositiveButton("Replace") { _, _ -> Ui.askPin(this, wallet, "Enter your card PIN") { wallet.remove(); choosePin(ent) } }
+                .setNegativeButton("Cancel", null).show()
+            else -> choosePin(ent)
+        }
+    }
+
+    /** Shows this card as a link and a QR code the website opens, after your fingerprint. */
+    private fun toWebsite() {
+        Ui.confirm(this, wallet, "Show my card code", "It carries your 12 backup words") {
+            clear()
+            val link = "${Wallet.SITE}#import=${wallet.phrase().joinToString(".")}"
+            body.addView(big("Use on the website", 30f)); body.addView(gap(8))
+            body.addView(text("Scan this with the camera of the phone or tablet that has the website open. It adds this same card there, with the same SPP.", Ui.DUST))
+            body.addView(gap(8))
+            body.addView(text("It carries your 12 words, so it is your card. Only scan it on your own devices.", Ui.BAD, 14f))
+            body.addView(gap(14))
+            body.addView(ImageView(this).apply {
+                setImageBitmap(Ui.qr(link, 720)); adjustViewBounds = true
+                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
+            })
+            body.addView(button("Send the link to myself") {
+                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), "Send link"))
+            })
+            body.addView(button("Done", primary = true) { home() })
+        }
     }
 
     override fun onResume() { super.onResume(); if (onHome) refresh() }
@@ -177,6 +229,7 @@ class WalletActivity : Activity() {
         listView = column().also { body.addView(it) }
         body.addView(gap(26))
         body.addView(button("Show backup words") { showWords() })
+        body.addView(button("Use on the website") { toWebsite() })
         body.addView(button("Network") { network() })
         body.addView(button("Remove card from this phone") { removeCard() })
         refresh()
@@ -247,7 +300,9 @@ class WalletActivity : Activity() {
     private fun scan() {
         GmsBarcodeScanning.getClient(this).startScan()
             .addOnSuccessListener { code ->
-                val r = PayRequest.parse(code.rawValue ?: "")
+                val raw = code.rawValue ?: ""
+                if (raw.contains("import=") || raw.startsWith("cinderpay://import")) { importCard(raw); return@addOnSuccessListener }
+                val r = PayRequest.parse(raw)
                 if (r == null) Toast.makeText(this, "That isn't a Cinder payment code.", Toast.LENGTH_LONG).show()
                 else PaySheetActivity.open(this, r)
             }

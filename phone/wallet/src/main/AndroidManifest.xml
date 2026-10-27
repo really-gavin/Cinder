@@ -24,6 +24,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- cinderpay://import?words=… : a card sent from the website -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="cinderpay" android:host="import" />
+            </intent-filter>
         </activity>
 
         <!-- The pay sheet. Opens over whatever you're doing, like Apple Pay. -->

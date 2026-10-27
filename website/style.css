@@ -401,3 +401,7 @@ button, .btn, .nav a, .netpill { touch-action: manipulation; -webkit-tap-highlig
 .linkbtn { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .linkbtn:hover { color: var(--ink); text-decoration-thickness: 2px; }
 @media (pointer: coarse) { .linkbtn { padding-block: 10px; } }
+
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.tiles .btn { justify-content: center; min-height: 54px; box-sizing: border-box; }
+@media (max-width: 640px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

@@ -183,6 +183,7 @@ function renderWallet() {
     root.innerHTML = `<div class="page-head"><h2>Wallet.</h2></div><div class="msg bad">The wallet needs a secure page to make and protect keys. Open this site over https, or at http://localhost on the machine running the node.</div>`;
     return;
   }
+  if (card.importing || card.importError) return importScreen(root);
   if (!hasWallet() || card.recover) return setupStart(root);
   if (!card.unlocked) return pinScreen(root);
   walletMain(root);
@@ -297,6 +298,58 @@ function pinScreen(root) {
   $('#forgot-pin').onclick = () => { card.recover = true; renderWallet(); };
 }
 
+// A card arriving from the app: pick a PIN for this browser and it's the same card, same SPP.
+function importScreen(root) {
+  if (card.importError) {
+    card.importError = false;
+    root.innerHTML = `<div class="page-head"><h2>That link didn’t work.</h2><p class="lede">It’s missing words, or one is wrong. Open Cinder Wallet and try “Use on the website” again.</p></div>`;
+    return;
+  }
+  const ent = card.importing, id = X.keysFromEntropy(ent).id;
+  if (card.saved && card.saved.id === id) {
+    card.importing = null;
+    root.innerHTML = `<div class="page-head"><h2>This card is already here.</h2><p class="lede">${formatId(id)} is saved on this browser. Unlock it with your PIN.</p><div><a class="btn hi" href="#wallet" id="imp-ok">Go to my card</a></div></div>`;
+    $('#imp-ok').onclick = e => { e.preventDefault(); renderWallet(); };
+    return;
+  }
+  root.innerHTML = `<div class="page-head"><h2>Add your card here.</h2>
+    <p class="lede">This brings your card from the Cinder Wallet app to this browser. Same card, same balance, same SPP.${card.saved ? ` <b>It replaces the card saved here (${formatId(card.saved.id)}).</b> Make sure you have its 12 words first.` : ''}</p></div>
+    <form class="cols" id="imp">
+      ${cardFront(id, 'Moving here')}
+      <div class="panel heavy">
+        <label class="f" for="ipin">Choose a 6-digit PIN for this browser<input id="ipin" class="pin" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="new-password"></label>
+        <div id="imsg"></div>
+        <div class="row"><button class="btn hi" type="submit">Add card</button><button class="btn ghost sm" type="button" id="icancel">Cancel</button></div>
+      </div></form>`;
+  $('#ipin').focus();
+  $('#icancel').onclick = () => { card.importing = null; renderWallet(); };
+  $('#imp').onsubmit = e => {
+    e.preventDefault();
+    const pin = $('#ipin').value;
+    if (!/^\d{6}$/.test(pin)) return void ($('#imsg').innerHTML = `<div class="msg bad">The PIN is exactly 6 digits.</div>`);
+    card.importing = null;
+    setupReveal(root, ent, pin, false);
+  };
+}
+
+// Show the 12 words as a link and a QR code, for opening the same card in the app (or another browser).
+async function transferPanel(slot) {
+  const words = await withSpp('Moving your card to another device shows your 12 words. Anyone who scans this can spend your CDR.', async () => {
+    return X.phraseFromEntropy(await X.unlockEntropy(card.saved.box, card.pin, $('#spp-in').value));
+  });
+  if (!words) return;
+  const joined = words.join('.');
+  const site = location.origin + location.pathname;
+  const appLink = `intent://import?words=${joined}#Intent;scheme=cinderpay;package=app.cinder.wallet;end`;
+  const webLink = `${site}#import=${joined}`;
+  slot.innerHTML = `<div class="panel heavy" style="gap:12px"><h3>Use this card on another device</h3>
+    <div class="msg warn">Only scan or open this on your own phone. It carries your 12 words, so it is your card.</div>
+    <figure class="qr">${qrSvg(webLink)}<figcaption class="muted">Scan with the phone’s camera.</figcaption></figure>
+    <div class="row">${isAndroid ? `<a class="btn hi sm" href="${esc(appLink)}">Open in Cinder Wallet</a>` : ''}<button class="btn sm" type="button" id="xfer-copy">Copy link</button><button class="btn ghost sm" type="button" id="xfer-hide">Hide</button></div></div>`;
+  $('#xfer-copy').onclick = e => copy(webLink, e.currentTarget);
+  $('#xfer-hide').onclick = () => { slot.innerHTML = ''; };
+}
+
 function confirmForget(slot) {
   slot.innerHTML = `<div class="msg warn" style="display:grid;gap:10px">This removes the card from this device. Without your 12 backup words, the CDR on it is gone for good.
     <div><button class="btn sm" type="button" id="forget-yes">Remove it</button></div></div>`;
@@ -315,6 +368,13 @@ function walletMain(root) {
         <div class="row"><button class="btn sm" type="button" id="w-copy">Copy card ID</button><a class="btn ghost sm" href="#id-${esc(card.saved.id)}">View in explorer</a></div>
       </div>
     </div>
+    <div class="tiles">
+      <button class="btn hi" type="button" id="t-send">Send</button>
+      <button class="btn" type="button" id="t-recv">Receive</button>
+      <a class="btn" href="#checkout">Take payments</a>
+      <button class="btn" type="button" id="t-words">Backup words</button>
+    </div>
+    <div id="w-panel"></div>
     <form class="panel heavy" id="w-send" autocomplete="off">
       <h3>Send CDR</h3>
       <div class="two">
@@ -327,14 +387,31 @@ function walletMain(root) {
     </form>
     <div class="panel"><h3>Activity</h3><div class="scroll" id="w-hist"><p class="muted">Loading…</p></div></div>
     <div class="row">
-      <button class="btn ghost sm" type="button" id="w-lock">Lock</button>
       <button class="btn ghost sm" type="button" id="w-words">Show backup words</button>
+      <button class="btn ghost sm" type="button" id="w-xfer">Use on another device</button>
+      <button class="btn ghost sm" type="button" id="w-net">Network</button>
+      <button class="btn ghost sm" type="button" id="w-lock">Lock</button>
       <button class="btn ghost sm" type="button" id="w-rm">Remove from this device</button>
     </div>
     <div id="w-foot"></div>`;
   $('#w-copy').onclick = e => copy(formatId(card.saved.id), e.currentTarget);
   $('#w-lock').onclick = () => { Object.assign(card, { unlocked: false, pin: null }); renderWallet(); };
   $('#w-rm').onclick = () => confirmForget($('#w-foot'));
+  $('#w-xfer').onclick = () => transferPanel($('#w-foot'));
+  $('#w-net').onclick = () => { $('#nodeurl').value = API || ''; $('#nodedlg').showModal(); };
+  $('#t-words').onclick = () => $('#w-words').click();
+  $('#t-send').onclick = () => { $('#w-send').scrollIntoView({ behavior: 'smooth', block: 'center' }); $('#s-to').focus({ preventScroll: true }); };
+  $('#t-recv').onclick = () => {
+    const slot = $('#w-panel');
+    if (slot.innerHTML) { slot.innerHTML = ''; return; }
+    slot.innerHTML = `<div class="panel" style="gap:12px;justify-items:center;text-align:center"><h3>Receive</h3>
+      <p class="muted">Anyone with Cinder Wallet can scan this to pay you.</p>
+      <figure class="qr">${qrSvg('cinderpay://pay?to=' + card.saved.id)}</figure>
+      <div class="mono-id" style="font-size:22px">${formatId(card.saved.id)}</div>
+      <div class="row"><button class="btn sm" type="button" id="r-copy">Copy card ID</button><button class="btn ghost sm" type="button" id="r-hide">Hide</button></div></div>`;
+    $('#r-copy').onclick = e => copy(formatId(card.saved.id), e.currentTarget);
+    $('#r-hide').onclick = () => { slot.innerHTML = ''; };
+  };
   $('#w-words').onclick = async () => {
     const words = await withSpp('Your SPP unlocks the backup words.', async () => {
       const ent = await X.unlockEntropy(card.saved.box, card.pin, $('#spp-in').value);
@@ -972,6 +1049,13 @@ async function checkPaid() {
 // ------------------------------------------------------------------ router, refresh
 let current = 'home';
 function route() {
+  // A card sent from the Cinder Wallet app: #import=word.word… . Keep the words in memory only and
+  // take them out of the address bar right away.
+  const im = location.hash.match(/^#import=([a-z.]+)$/);
+  if (im) {
+    try { card.importing = X.entropyFromPhrase(im[1].split('.').join(' ')); } catch { card.importing = null; card.importError = true; }
+    history.replaceState(null, '', location.pathname + location.search + '#wallet');
+  }
   const h = location.hash.slice(1) || 'home';
   let view = h, arg = null;
   const m = h.match(/^(block|tx|id|job|loan)-(.+)$/);
