@@ -159,3 +159,17 @@ class StripeDrawable(private val w: Int) : android.graphics.drawable.Drawable() 
     @Deprecated("Deprecated in Java")
     override fun getOpacity() = android.graphics.PixelFormat.OPAQUE
 }
+
+/** Android 15 draws apps under the status and navigation bars; keep content clear of them. */
+fun View.padForSystemBars(top: Boolean = true) {
+    val base = intArrayOf(paddingLeft, paddingTop, paddingRight, paddingBottom)
+    setOnApplyWindowInsetsListener { v, insets ->
+        val (l, t, r, b) = if (Build.VERSION.SDK_INT >= 30) {
+            val i = insets.getInsets(android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.displayCutout())
+            listOf(i.left, i.top, i.right, i.bottom)
+        } else @Suppress("DEPRECATION") listOf(insets.systemWindowInsetLeft, insets.systemWindowInsetTop, insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
+        v.setPadding(base[0] + l, base[1] + (if (top) t else 0), base[2] + r, base[3] + b)
+        insets
+    }
+    requestApplyInsets()
+}

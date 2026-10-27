@@ -50,7 +50,7 @@ class WalletActivity : Activity() {
         super.onCreate(savedInstanceState)
         wallet = Wallet(this)
         body = column(20).apply { setPadding(dp(20), dp(20), dp(20), dp(36)) }
-        setContentView(ScrollView(this).apply { setBackgroundColor(Ui.INK); isFillViewport = true; addView(body) })
+        setContentView(ScrollView(this).apply { setBackgroundColor(Ui.INK); isFillViewport = true; addView(body); padForSystemBars() })
         if (wallet.hasCard) home() else welcome()
     }
 

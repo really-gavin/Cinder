@@ -22,8 +22,9 @@ class Prefs(context: Context) {
     var site: String
         get() = p.getString("site", DEFAULT_SITE) ?: DEFAULT_SITE
         set(v) = p.edit().putString("site", v).apply()
+    /** Cloudflare tunnel token for your own domain. Anything that isn't a real token counts as empty. */
     var tunnelToken: String
-        get() = p.getString("tunnel_token", "") ?: ""
+        get() = (p.getString("tunnel_token", "") ?: "").takeIf { isTunnelToken(it) } ?: ""
         set(v) = p.edit().putString("tunnel_token", v.trim()).apply()
     var publicUrl: String
         get() = p.getString("public_url", "") ?: ""
@@ -64,6 +65,15 @@ class Prefs(context: Context) {
     }
 
     companion object {
+        /** Real tokens are base64 JSON with the account ("a"), tunnel ("t") and secret ("s"). */
+        fun isTunnelToken(t: String): Boolean = try {
+            val raw = t.trim()
+            val bytes = runCatching { java.util.Base64.getDecoder().decode(raw) }
+                .getOrElse { java.util.Base64.getUrlDecoder().decode(raw) }
+            val j = org.json.JSONObject(String(bytes))
+            j.has("a") && j.has("t") && j.has("s")
+        } catch (_: Exception) { false }
+
         const val DEFAULT_SITE = "https://really-gavin.github.io/Cinder/"
     }
 }

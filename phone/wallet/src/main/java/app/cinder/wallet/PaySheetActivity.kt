@@ -61,6 +61,7 @@ class PaySheetActivity : Activity() {
         }
         root.addView(sheet)
         setContentView(root)
+        sheet.padForSystemBars(top = false)
         load(intent)
         sheet.translationY = 600f
         ObjectAnimator.ofFloat(sheet, "translationY", 600f, 0f).setDuration(260).start()

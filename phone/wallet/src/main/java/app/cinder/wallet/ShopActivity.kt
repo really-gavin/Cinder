@@ -47,7 +47,7 @@ class ShopActivity : Activity(), NfcAdapter.ReaderCallback {
         wallet = Wallet(this)
         nfc = NfcAdapter.getDefaultAdapter(this)
         body = column(20)
-        setContentView(ScrollView(this).apply { setBackgroundColor(Ui.INK); addView(body) })
+        setContentView(ScrollView(this).apply { setBackgroundColor(Ui.INK); addView(body); padForSystemBars() })
         askPrice()
     }
 

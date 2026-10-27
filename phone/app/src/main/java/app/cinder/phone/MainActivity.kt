@@ -50,6 +50,7 @@ class MainActivity : Activity() {
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(body)
         setContentView(scroll)
+        scroll.padForSystemBars()
         render()
         handleSetupLink(intent)
     }
@@ -183,9 +184,16 @@ class MainActivity : Activity() {
             val url = pub.text.toString().trim()
             if (url.isNotEmpty() && !url.startsWith("https://")) { msg.setTextColor(BAD); msg.text = "The public address starts with https://"; return@button }
             prefs.publicUrl = url
-            val t = tok.text.toString()
-            if (t != "••••••••") { prefs.tunnelToken = t; CinderService.instance?.tunnel?.restart() }
-            msg.setTextColor(GOOD); msg.text = "Saved."
+            val t = tok.text.toString().trim()
+            if (t != "••••••••") {
+                if (t.isNotEmpty() && !Prefs.isTunnelToken(t)) {
+                    msg.setTextColor(BAD)
+                    msg.text = "That isn't a Cloudflare tunnel token. It's a long code starting with eyJ. Leave the box empty to use the free automatic address."
+                    return@button
+                }
+                prefs.tunnelToken = t; CinderService.instance?.tunnel?.restart()
+            }
+            msg.setTextColor(GOOD); msg.text = if (t.isEmpty()) "Saved. Using the free automatic address." else "Saved."
         })
     }
 
@@ -362,4 +370,18 @@ class MainActivity : Activity() {
         layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, dp(52)).apply { topMargin = dp(6) }
         setOnClickListener { onClick() }
     }
+}
+
+/** Android 15 draws apps under the status and navigation bars; keep content clear of them. */
+fun View.padForSystemBars() {
+    val base = intArrayOf(paddingLeft, paddingTop, paddingRight, paddingBottom)
+    setOnApplyWindowInsetsListener { v, insets ->
+        val (l, t, r, b) = if (android.os.Build.VERSION.SDK_INT >= 30) {
+            val i = insets.getInsets(android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.displayCutout())
+            listOf(i.left, i.top, i.right, i.bottom)
+        } else @Suppress("DEPRECATION") listOf(insets.systemWindowInsetLeft, insets.systemWindowInsetTop, insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
+        v.setPadding(base[0] + l, base[1] + t, base[2] + r, base[3] + b)
+        insets
+    }
+    requestApplyInsets()
 }
