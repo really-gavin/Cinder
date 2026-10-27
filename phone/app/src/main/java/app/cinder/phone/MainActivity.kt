@@ -112,9 +112,16 @@ class MainActivity : Activity() {
     private fun chooseScreen() {
         body.addView(big("Set up this phone", 34f))
         body.addView(text("Pick what this phone does for the Cinder network. You can change it later.", DUST).also { it.setPadding(0, dp(8), 0, dp(20)) })
-        body.addView(button("Mine Cinder", primary = true) { prefs.mode = "miner"; prefs.running = true; CinderService.start(this); askForBackground(); render() })
-        body.addView(gap(10))
-        body.addView(button("Run a node") { prefs.mode = "node"; prefs.running = true; CinderService.start(this); askForBackground(); render() })
+        fun pick(m: String, mine: Boolean, node: Boolean) {
+            prefs.mode = m; prefs.alsoMine = mine; prefs.alsoNode = node; prefs.running = true
+            CinderService.start(this); askForBackground(); render()
+        }
+        body.addView(button("Mine Cinder", primary = true) { pick("miner", true, false) })
+        body.addView(text("Earn CDR. Your card gets the rewards.", DUST).also { it.setPadding(0, dp(4), 0, dp(14)) })
+        body.addView(button("Run a node") { pick("node", false, true) })
+        body.addView(text("Keep a copy of the network and help everyone connect.", DUST).also { it.setPadding(0, dp(4), 0, dp(14)) })
+        body.addView(button("Both") { pick("node", true, true) })
+        body.addView(text("Run a node and mine at the same time.", DUST).also { it.setPadding(0, dp(4), 0, 0) })
     }
 
     private fun minerScreen() {
@@ -391,7 +398,8 @@ class MainActivity : Activity() {
             typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); setPadding(dp(10), 0, 0, 0)
         })
         addView(View(context).apply { layoutParams = LinearLayout.LayoutParams(0, 1, 1f) })
-        val mode = when (Prefs(context).mode) { "miner" -> "Miner"; "node" -> "Node"; else -> null }
+        val pf = Prefs(context)
+        val mode = when { pf.mode == null -> null; pf.mines && pf.serves -> "Node + Miner"; pf.serves -> "Node"; else -> "Miner" }
         if (mode != null) addView(TextView(context).apply {
             text = mode; setTextColor(INK); textSize = 13f; typeface = Typeface.DEFAULT_BOLD
             setPadding(dp(10), dp(4), dp(10), dp(4)); background = GradientDrawable().apply { setColor(HIVIS); cornerRadius = dp(2).toFloat() }
