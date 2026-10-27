@@ -1,0 +1,10 @@
+{
+  "android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME": "app.cinder.phone/.AdminReceiver",
+  "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION": "https://raw.githubusercontent.com/really-gavin/Cinder/main/website/phone/cinder-phone.apk",
+  "android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM": "XlGYvljd7_8q1rGuybVC_Q9c5X8phA3uGiVaY9hQKPs",
+  "android.app.extra.PROVISIONING_LEAVE_ALL_SYSTEM_APPS_ENABLED": true,
+  "android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE": {
+    "mode": "miner",
+    "site": "https://really-gavin.github.io/Cinder/"
+  }
+}

@@ -1,0 +1,297 @@
+package app.cinder.phone
+
+import android.app.Activity
+import android.app.AlertDialog
+import android.content.ClipboardManager
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.net.ConnectivityManager
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.text.InputType
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+import android.widget.Button
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.Switch
+import android.widget.TextView
+import java.net.Inet4Address
+import java.util.Locale
+import kotlin.concurrent.thread
+
+/** The phone's one screen: what it's doing, and the few settings it has. */
+class MainActivity : Activity() {
+    private lateinit var prefs: Prefs
+    private lateinit var body: LinearLayout
+    private val ui = Handler(Looper.getMainLooper())
+    private val rows = mutableMapOf<String, TextView>()
+    private var statusView: TextView? = null
+    private var nodeStatus: org.json.JSONObject? = null
+    private var nodeError: String? = null
+
+    private val INK = 0xFF1F1E1B.toInt(); private val SLAB = 0xFF2E2D28.toInt()
+    private val MORTAR = 0xFF4A4740.toInt(); private val PAPER = 0xFFEBE8DF.toInt()
+    private val DUST = 0xFFA29D90.toInt(); private val HIVIS = 0xFFF3D317.toInt()
+    private val GOOD = 0xFF7FC58A.toInt(); private val BAD = 0xFFF08A80.toInt()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        prefs = Prefs(this)
+        val scroll = ScrollView(this).apply { setBackgroundColor(INK); isFillViewport = true }
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(20), dp(20), dp(28)) }
+        scroll.addView(root)
+        root.addView(header())
+        body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(body)
+        setContentView(scroll)
+        render()
+    }
+
+    override fun onResume() { super.onResume(); CinderService.start(this); tick() }
+    override fun onPause() { super.onPause(); ui.removeCallbacksAndMessages(null) }
+
+    // ------------------------------------------------------------- screens
+    private fun render() {
+        body.removeAllViews(); rows.clear(); statusView = null
+        when (prefs.mode) {
+            "miner" -> minerScreen()
+            "node" -> nodeScreen()
+            else -> chooseScreen()
+        }
+        body.addView(gap(28))
+        body.addView(footer())
+    }
+
+    private fun chooseScreen() {
+        body.addView(big("Set up this phone", 34f))
+        body.addView(text("Pick what this phone does for the Cinder network. You can change it later.", DUST).also { it.setPadding(0, dp(8), 0, dp(20)) })
+        body.addView(button("Mine Cinder", primary = true) { prefs.mode = "miner"; prefs.running = true; CinderService.start(this); render() })
+        body.addView(gap(10))
+        body.addView(button("Run a node") { prefs.mode = "node"; prefs.running = true; CinderService.start(this); render() })
+    }
+
+    private fun minerScreen() {
+        statusView = big("…", 30f).also { body.addView(it) }
+        body.addView(gap(16))
+        body.addView(panel(
+            row("Speed"), row("Blocks found"), row("Mining to"), row("Network"), row("Battery")))
+        body.addView(gap(22))
+        body.addView(label("Your card ID"))
+        body.addView(text("Rewards go to this card. It's on the front of your card in the Cinder wallet.", DUST))
+        val card = edit(CardId.format(prefs.cardId), "XXXX XXXX XXXX XXXX", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS)
+        body.addView(card)
+        val msg = text("", BAD); body.addView(msg)
+        body.addView(button("Save card ID") {
+            val id = CardId.normalize(card.text.toString())
+            if (!CardId.isValid(id)) { msg.text = "That card ID isn't right. It's 16 letters and numbers; one looks mistyped." }
+            else { prefs.cardId = id; card.setText(CardId.format(id)); msg.text = ""; toastRow("Saved") }
+        })
+        body.addView(gap(18))
+        body.addView(Switch(this).apply {
+            text = "Only mine while charging"; setTextColor(PAPER); textSize = 16f
+            isChecked = prefs.onlyWhileCharging
+            setOnCheckedChangeListener { _, on -> prefs.onlyWhileCharging = on }
+        })
+        body.addView(text("Mining makes phones hot. It always pauses above 40°C.", DUST))
+        body.addView(gap(18))
+        body.addView(startStop())
+    }
+
+    private fun nodeScreen() {
+        statusView = big("…", 30f).also { body.addView(it) }
+        body.addView(gap(16))
+        body.addView(panel(row("Block"), row("Peers"), row("On this Wi-Fi"), row("Public address"), row("Tunnel")))
+        body.addView(gap(22))
+        body.addView(label("Public address"))
+        body.addView(text("The address the tunnel serves, like https://node.yourdomain.com", DUST))
+        val pub = edit(prefs.publicUrl, "https://node.yourdomain.com", InputType.TYPE_TEXT_VARIATION_URI)
+        body.addView(pub)
+        body.addView(gap(12))
+        body.addView(label("Cloudflare tunnel token"))
+        body.addView(text("From Cloudflare: Zero Trust > Networks > Tunnels > your tunnel > the long token in the install command.", DUST))
+        val tok = edit(if (prefs.tunnelToken.isNotBlank()) "••••••••" else "", "Paste the token", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
+        body.addView(tok)
+        body.addView(button("Paste from clipboard") {
+            val clip = getSystemService(ClipboardManager::class.java).primaryClip
+            val t = clip?.getItemAt(0)?.coerceToText(this)?.toString()?.trim().orEmpty()
+            val m = Regex("eyJ[A-Za-z0-9_\\-=]{40,}").find(t)       // works with the whole install command too
+            tok.setText(m?.value ?: t)
+        })
+        body.addView(gap(10))
+        val msg = text("", DUST); body.addView(msg)
+        body.addView(button("Save", primary = true) {
+            val url = pub.text.toString().trim()
+            if (url.isNotEmpty() && !url.startsWith("https://")) { msg.setTextColor(BAD); msg.text = "The public address starts with https://"; return@button }
+            val changedUrl = url.trimEnd('/') != prefs.publicUrl
+            prefs.publicUrl = url
+            val t = tok.text.toString()
+            if (t != "••••••••") { prefs.tunnelToken = t; CinderService.instance?.tunnel?.restart() }
+            msg.setTextColor(GOOD)
+            msg.text = if (changedUrl) "Saved. Restart the node (Stop, then Start) so other nodes learn the new address." else "Saved."
+        })
+        body.addView(gap(18))
+        body.addView(startStop())
+    }
+
+    private fun startStop(): View = button(if (prefs.running) "Stop" else "Start") {
+        prefs.running = !prefs.running
+        if (prefs.running) CinderService.start(this) else {
+            CinderService.stop(this)
+            if (prefs.mode == "node") {
+                // The node runs inside this app's process; stopping fully means a restart.
+                ui.postDelayed({ android.os.Process.killProcess(android.os.Process.myPid()) }, 300)
+            }
+        }
+        render()
+    }
+
+    private fun footer(): View {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        if (Setup.isManaged(this)) {
+            box.addView(text("Cinder manages this phone. Releasing it stops Cinder and gives the phone back. A factory reset afterwards leaves it like new.", DUST))
+            box.addView(button("Release this phone") {
+                AlertDialog.Builder(this).setTitle("Release this phone?")
+                    .setMessage("Cinder stops and no longer manages this phone. To use it as Cinder again you'll need to reset it and scan the setup code.")
+                    .setPositiveButton("Release") { _, _ -> Setup.release(this); prefs.mode = null; render() }
+                    .setNegativeButton("Cancel", null).show()
+            })
+        } else if (prefs.mode != null) {
+            box.addView(button("Change what this phone does") { CinderService.stop(this); prefs.mode = null; render() })
+        }
+        return box
+    }
+
+    // ------------------------------------------------------------- live values
+    private fun tick() {
+        update()
+        ui.postDelayed(::tick, 1000)
+    }
+
+    private fun update() {
+        val svc = CinderService.instance
+        when (prefs.mode) {
+            "miner" -> {
+                val m = svc?.miner
+                setStatus(when {
+                    !prefs.running -> "Stopped" to DUST
+                    m == null -> "Starting…" to DUST
+                    m.status.startsWith("Mining") -> m.status to HIVIS
+                    m.status.startsWith("Paused") -> m.status to PAPER
+                    else -> m.status to BAD
+                })
+                set("Speed", m?.let { rate(it.hashrate) } ?: "—")
+                set("Blocks found", (m?.found?.get() ?: 0).toString())
+                set("Mining to", if (CardId.isValid(prefs.cardId)) CardId.format(prefs.cardId) else "No card yet")
+                set("Network", m?.lastError ?: prefs.node.ifBlank { "From ${prefs.site.removePrefix("https://").trimEnd('/')}" })
+                svc?.batteryInfo()?.let { (plugged, t) -> set("Battery", "${if (plugged) "Charging" else "Not charging"}, ${"%.0f".format(t)}°C") }
+            }
+            "node" -> {
+                if (prefs.running) thread {
+                    try { nodeStatus = Net.getJson("http://127.0.0.1:${NodeRunner.PORT}/api/status", 2000); nodeError = null }
+                    catch (e: Exception) { nodeStatus = null; nodeError = svc?.node?.crashed }
+                }
+                val s = nodeStatus
+                setStatus(when {
+                    !prefs.running -> "Stopped" to DUST
+                    s != null -> "Node running" to GOOD
+                    nodeError != null -> "Node stopped: $nodeError" to BAD
+                    else -> "Starting the node…" to DUST
+                })
+                set("Block", s?.optInt("height")?.let { String.format(Locale.US, "%,d", it) } ?: "—")
+                set("Peers", s?.optJSONArray("peers")?.length()?.toString() ?: "—")
+                set("On this Wi-Fi", localIp()?.let { "http://$it:${NodeRunner.PORT}" } ?: "Not on Wi-Fi")
+                set("Public address", prefs.publicUrl.ifBlank { "Not set" })
+                val t = svc?.tunnel
+                set("Tunnel", when {
+                    prefs.tunnelToken.isBlank() -> "Not set up"
+                    t == null -> "Starting…"
+                    t.state == "Connected" -> "Connected"
+                    else -> "${t.state} ${t.lastLine}".trim()
+                })
+            }
+        }
+    }
+
+    private fun localIp(): String? {
+        val cm = getSystemService(ConnectivityManager::class.java)
+        val lp = cm.getLinkProperties(cm.activeNetwork) ?: return null
+        return lp.linkAddresses.map { it.address }.firstOrNull { it is Inet4Address && !it.isLoopbackAddress }?.hostAddress
+    }
+
+    private fun rate(r: Double): String {
+        var v = r; var i = 0; val u = listOf("H/s", "kH/s", "MH/s", "GH/s")
+        while (v >= 1000 && i < u.size - 1) { v /= 1000; i++ }
+        return String.format(Locale.US, if (i == 0) "%.0f %s" else "%.2f %s", v, u[i])
+    }
+
+    private fun setStatus(s: Pair<String, Int>) { statusView?.apply { text = s.first; setTextColor(s.second) } }
+    private fun set(k: String, v: String) { rows[k]?.text = v }
+    private fun toastRow(s: String) = android.widget.Toast.makeText(this, s, android.widget.Toast.LENGTH_SHORT).show()
+
+    // ------------------------------------------------------------- little view kit
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private fun gap(h: Int) = View(this).apply { layoutParams = LinearLayout.LayoutParams(1, dp(h)) }
+
+    private fun header(): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+        setPadding(0, 0, 0, dp(26))
+        addView(ImageView(context).apply { setImageResource(R.drawable.ic_mark); layoutParams = LinearLayout.LayoutParams(dp(34), dp(24)) })
+        addView(TextView(context).apply {
+            text = "CINDER"; setTextColor(PAPER); textSize = 24f; letterSpacing = 0.08f
+            typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD); setPadding(dp(10), 0, 0, 0)
+        })
+        addView(View(context).apply { layoutParams = LinearLayout.LayoutParams(0, 1, 1f) })
+        val mode = when (Prefs(context).mode) { "miner" -> "Miner"; "node" -> "Node"; else -> null }
+        if (mode != null) addView(TextView(context).apply {
+            text = mode; setTextColor(INK); textSize = 13f; typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(10), dp(4), dp(10), dp(4)); background = GradientDrawable().apply { setColor(HIVIS); cornerRadius = dp(2).toFloat() }
+        })
+    }
+
+    private fun big(s: String, size: Float) = TextView(this).apply {
+        text = s; textSize = size; setTextColor(PAPER)
+        typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+    }
+    private fun text(s: String, color: Int = PAPER) = TextView(this).apply { text = s; textSize = 15f; setTextColor(color); setLineSpacing(0f, 1.2f) }
+    private fun label(s: String) = TextView(this).apply { text = s; textSize = 16f; setTextColor(PAPER); typeface = Typeface.DEFAULT_BOLD; setPadding(0, 0, 0, dp(4)) }
+
+    private fun row(k: String): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(10), 0, dp(10))
+        addView(TextView(context).apply { text = k; textSize = 15f; setTextColor(DUST); layoutParams = LinearLayout.LayoutParams(dp(120), WRAP_CONTENT) })
+        val v = TextView(context).apply { text = "—"; textSize = 15f; setTextColor(PAPER); typeface = Typeface.MONOSPACE; layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f) }
+        rows[k] = v; addView(v)
+    }
+
+    private fun panel(vararg kids: View) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(6), dp(16), dp(6))
+        background = GradientDrawable().apply { setColor(SLAB); setStroke(dp(1), MORTAR); cornerRadius = dp(2).toFloat() }
+        kids.forEachIndexed { i, v ->
+            if (i > 0) addView(View(context).apply { setBackgroundColor(MORTAR); layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 1) })
+            addView(v)
+        }
+    }
+
+    private fun edit(value: String, hint: String, type: Int) = EditText(this).apply {
+        setText(value); this.hint = hint; inputType = type; textSize = 17f
+        setTextColor(PAPER); setHintTextColor(MORTAR); setSingleLine()
+        setPadding(dp(12), dp(12), dp(12), dp(12))
+        background = GradientDrawable().apply { setColor(SLAB); setStroke(dp(1), MORTAR); cornerRadius = dp(2).toFloat() }
+        layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(8); bottomMargin = dp(6) }
+    }
+
+    private fun button(s: String, primary: Boolean = false, onClick: () -> Unit) = Button(this).apply {
+        text = s; isAllCaps = false; textSize = 16f; typeface = Typeface.DEFAULT_BOLD
+        setTextColor(if (primary) INK else PAPER)
+        background = GradientDrawable().apply {
+            setColor(if (primary) HIVIS else INK); setStroke(dp(2), if (primary) HIVIS else PAPER); cornerRadius = dp(2).toFloat()
+        }
+        layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, dp(52)).apply { topMargin = dp(6) }
+        setOnClickListener { onClick() }
+    }
+}

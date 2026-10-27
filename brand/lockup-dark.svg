@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 72" width="600" height="144">
+  <style>@import url('https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil+Display:wght@800&amp;display=swap');</style>
+  <rect width="300" height="72" fill="#1f1e1b"/>
+  <path transform="translate(18 18) scale(1.5)" fill="#f3d317" fill-rule="evenodd" d="M0 0h34v24H0zM5 5v14h10V5zm14 0v14h10V5z"/>
+  <text x="84" y="53" fill="#e9e7e1" font-family="'Big Shoulders Stencil Display', Impact, sans-serif" font-weight="800" font-size="46" letter-spacing="2.5">CINDER</text>
+</svg>

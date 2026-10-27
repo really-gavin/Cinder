@@ -1,0 +1,16 @@
+# Never commit these: wallet.json holds a private key, data/ is the chain.
+wallet.json
+*.wallet.json
+data/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Phone app: build output and the signing key (keep the key safe, off GitHub)
+phone/keystore.properties
+*.jks
+*.keystore
+phone/.gradle/
+phone/build/
+phone/app/build/
+phone/local.properties

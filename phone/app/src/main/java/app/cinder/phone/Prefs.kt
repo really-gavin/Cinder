@@ -1,0 +1,75 @@
+package app.cinder.phone
+
+import android.content.Context
+import android.content.SharedPreferences
+import android.os.BaseBundle
+
+/** Everything this phone remembers. Set by the setup QR code, editable on screen. */
+class Prefs(context: Context) {
+    private val p: SharedPreferences =
+        context.applicationContext.getSharedPreferences("cinder", Context.MODE_PRIVATE)
+
+    var mode: String?                      // "miner" or "node"
+        get() = p.getString("mode", null)
+        set(v) = p.edit().putString("mode", v).apply()
+    var cardId: String
+        get() = p.getString("card", "") ?: ""
+        set(v) = p.edit().putString("card", v).apply()
+    /** Node the miner talks to. Empty means: look it up from the website. */
+    var node: String
+        get() = p.getString("node", "") ?: ""
+        set(v) = p.edit().putString("node", v.trimEnd('/')).apply()
+    var site: String
+        get() = p.getString("site", DEFAULT_SITE) ?: DEFAULT_SITE
+        set(v) = p.edit().putString("site", v).apply()
+    var tunnelToken: String
+        get() = p.getString("tunnel_token", "") ?: ""
+        set(v) = p.edit().putString("tunnel_token", v.trim()).apply()
+    var publicUrl: String
+        get() = p.getString("public_url", "") ?: ""
+        set(v) = p.edit().putString("public_url", v.trim().trimEnd('/')).apply()
+    var peers: String                       // comma separated
+        get() = p.getString("peers", "") ?: ""
+        set(v) = p.edit().putString("peers", v).apply()
+    var onlyWhileCharging: Boolean
+        get() = p.getBoolean("only_charging", true)
+        set(v) = p.edit().putBoolean("only_charging", v).apply()
+    var running: Boolean
+        get() = p.getBoolean("running", true)
+        set(v) = p.edit().putBoolean("running", v).apply()
+
+    /** Settings carried in the setup QR code (the "admin extras bundle"). */
+    fun saveExtras(extras: BaseBundle?) {
+        if (extras == null) return
+        fun s(key: String) = extras.getString(key)?.takeIf { it.isNotBlank() }
+        s("mode")?.let { if (it == "miner" || it == "node") mode = it }
+        s("card")?.let { cardId = CardId.normalize(it) }
+        s("node")?.let { node = it }
+        s("site")?.let { site = it }
+        s("tunnel_token")?.let { tunnelToken = it }
+        s("public_url")?.let { publicUrl = it }
+        s("peers")?.let { peers = it }
+    }
+
+    companion object {
+        const val DEFAULT_SITE = "https://really-gavin.github.io/Cinder/"
+    }
+}
+
+/** Card IDs: 16 characters, Crockford base32, last one is a check digit. */
+object CardId {
+    private const val ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+    fun normalize(s: String): String = s.uppercase()
+        .replace(" ", "").replace("-", "")
+        .replace('O', '0').replace('I', '1').replace('L', '1')
+
+    fun isValid(s: String): Boolean {
+        if (s.length != 16 || s.any { it !in ALPHABET }) return false
+        var total = 0
+        for (i in 0 until 15) total += (i + 1) * ALPHABET.indexOf(s[i])
+        return ALPHABET[total % 31] == s[15]
+    }
+
+    fun format(s: String) = s.chunked(4).joinToString(" ")
+}

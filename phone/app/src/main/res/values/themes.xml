@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ink">#1F1E1B</color>
+    <color name="slab">#2E2D28</color>
+    <color name="mortar">#4A4740</color>
+    <color name="paper">#EBE8DF</color>
+    <color name="dust">#A29D90</color>
+    <color name="hivis">#F3D317</color>
+    <color name="good">#7FC58A</color>
+    <color name="bad">#F08A80</color>
+
+    <style name="Theme.Cinder" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/ink</item>
+        <item name="android:statusBarColor">@color/ink</item>
+        <item name="android:navigationBarColor">@color/ink</item>
+        <item name="android:colorAccent">@color/hivis</item>
+        <item name="android:colorPrimary">@color/ink</item>
+        <item name="android:textColorPrimary">@color/paper</item>
+        <item name="android:textColorSecondary">@color/dust</item>
+    </style>
+    <style name="Theme.Cinder.Invisible" parent="android:Theme.Translucent.NoTitleBar" />
+</resources>

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cinder</title>
+<meta name="description" content="Cinder is a proof-of-work cryptocurrency. Run a node, mine blocks, hold your own keys.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 24'%3E%3Cpath fill='%23f3d317' fill-rule='evenodd' d='M0 0h34v24H0zM5 5v14h10V5zm14 0v14h10V5z'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Big+Shoulders+Stencil+Display:wght@800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bar">
+  <div class="wrap">
+    <a class="brand" href="#home" aria-label="Cinder home">
+      <svg viewBox="0 0 34 24" aria-hidden="true"><path fill="#f3d317" fill-rule="evenodd" d="M0 0h34v24H0zM5 5v14h10V5zm14 0v14h10V5z"/></svg>
+      <b>CINDER</b>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="#home">Home</a>
+      <a href="#start">Get started</a>
+      <a href="#wallet">Wallet</a>
+      <a href="#jobs">Jobs</a>
+      <a href="#loans">Loans</a>
+      <a href="#checkout">Checkout</a>
+      <a href="#explorer">Explorer</a>
+    </nav>
+    <button class="netpill" id="netpill" type="button" data-on="0"><i></i><span id="netlabel">Connecting…</span></button>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ============================================================ HOME -->
+<div data-view="home">
+  <div class="wrap hero">
+    <div class="copy">
+      <h1><span>Every block</span><span>laid by hand.</span></h1>
+      <p class="lede">Cinder is its own currency. Nobody pre-mined it and nobody can print more. You get it by mining a block, doing a job, or being paid by someone who did.</p>
+      <div class="btns">
+        <a class="btn hi" href="#wallet">Get your card</a>
+        <a class="btn ghost" href="#jobs">Find a job</a>
+      </div>
+    </div>
+    <div>
+      <div class="wall" id="wall" aria-label="The most recent blocks, newest on top"></div>
+      <p class="muted" style="font-size:14px;margin-top:10px" id="wallcap">The wall above is the live chain. Newest block on top.</p>
+    </div>
+  </div>
+
+  <div class="wrap" style="padding-bottom:56px">
+    <dl class="plate" id="plate">
+      <div><dt>Blocks laid</dt><dd id="s-height">0</dd></div>
+      <div><dt>Coins mined</dt><dd id="s-supply">0 <small>CDR</small></dd></div>
+      <div><dt>Reward right now</dt><dd id="s-reward">40 <small>CDR</small></dd></div>
+      <div><dt>Network hashrate</dt><dd id="s-hash">0 <small>H/s</small></dd></div>
+    </dl>
+  </div>
+
+  <section class="band">
+    <div class="wrap">
+      <h2 style="margin-bottom:28px">Earn it, borrow it, spend it.</h2>
+      <div class="trio">
+        <div><h3>Jobs</h3><p>Post a job and its pay is locked on the network until the work is done. Approve it, or let the review day run out, and the worker is paid. Nobody sits in the middle holding the money.</p><a href="#jobs">See open jobs</a></div>
+        <div><h3>Loans</h3><p>Ask for CDR to get something going. Anyone can fund it at the terms you set. If it doesn't work out, either side can close it and whatever's left goes straight back.</p><a href="#loans">See loan requests</a></div>
+        <div><h3>Pay</h3><p>Every wallet is a card with a 16-character ID, read out in fours like a card number. Payments arrive in about a minute and cost nothing: your device does a second of work instead of paying a fee.</p><a href="#wallet">Get your card</a></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap split">
+      <div>
+        <h2>It cools, it doesn't halve.</h2>
+        <p>Bitcoin cuts its reward in half overnight every four years. Cinder lets it slide instead: within each year the reward eases down a little every block, landing at exactly half by the end. Miners never wake up to a cliff.</p>
+        <p class="muted">The total that will ever exist is fixed at 31,536,000 CDR, one for every second in a year.</p>
+      </div>
+      <figure class="chart" style="margin:0">
+        <div id="curve"></div>
+        <figcaption class="muted" style="font-size:14px;margin-top:8px">Block reward over the first ten years of the chain. Shaded area is every coin that will be mined in that time.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap split">
+      <div>
+        <h2>The rules.</h2>
+        <p>These are enforced by every node. A block that breaks one is thrown away, no matter how much work went into it.</p>
+        <p><a href="#start">Run a node</a> and you enforce them too.</p>
+      </div>
+      <div class="scroll">
+        <table class="rules">
+          <tr><th>Proof of work</th><td>Double SHA-256 over the block header</td></tr>
+          <tr><th>Block time</th><td>60 seconds, on average</td></tr>
+          <tr><th>Difficulty</th><td>Re-aimed every block from the last 30</td></tr>
+          <tr><th>First reward</th><td>40 CDR, cooling to half each year</td></tr>
+          <tr><th>Total supply</th><td>31,536,000 CDR, ever</td></tr>
+          <tr><th>Pre-mine</th><td>None. Block zero paid nobody.</td></tr>
+          <tr><th>Smallest unit</th><td>1 ash = 0.00000001 CDR</td></tr>
+          <tr><th>Card ID</th><td>16 letters and numbers, last one catches typos</td></tr>
+          <tr><th>Fees</th><td>None, with a second of work. Or pay one to skip it.</td></tr>
+          <tr><th>Job pay</th><td>Held by the network. One review day, then it pays itself.</td></tr>
+          <tr><th>Late loans</th><td>Half of everything the borrower receives goes to the lender</td></tr>
+          <tr><th>Signatures</th><td>secp256k1, low-S, deterministic</td></tr>
+          <tr><th>Fork choice</th><td>Most total work wins</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ============================================================ GET STARTED -->
+<div data-view="start" hidden>
+  <div class="wrap page">
+    <div class="page-head">
+      <h2>Get on the network.</h2>
+      <p class="lede">You need Python 3.9 or newer. That's it. These five steps take about two minutes.</p>
+    </div>
+    <ol class="steps">
+      <li><div>
+        <h3>Get your card</h3>
+        <p>Make a wallet on the <a href="#wallet">wallet page</a>. You choose a 6-digit PIN, and you get a card ID, a payment code (SPP) and 12 backup words. That's all you need to send, receive, take jobs and borrow.</p>
+      </div></li>
+      <li><div>
+        <h3>Earn your first CDR</h3>
+        <p>Everyone starts at zero. Take a job from the <a href="#jobs">job board</a>, ask someone to pay you, or mine blocks yourself with the steps below.</p>
+      </div></li>
+      <li><div>
+        <h3>Download Cinder to mine</h3>
+        <p>You need Python 3.9 or newer. Unzip the Cinder folder, open a terminal in it and install the one library it needs.</p>
+        <pre>pip install ecdsa</pre>
+      </div></li>
+      <li><div>
+        <h3>Start a node</h3>
+        <p>Your node keeps a full copy of the chain and checks every block against the rules. Point it at someone already on the network.</p>
+        <pre>python node.py --peer <span id="peer-hint">http://SEED-NODE:8642</span></pre>
+        <p class="muted">The node serves this website too, at <code>http://localhost:8642</code>.</p>
+      </div></li>
+      <li><div>
+        <h3>Mine to your card</h3>
+        <p>The miner uses every CPU core. Each block you find pays your card the current reward plus any fees in it.</p>
+        <pre>python miner.py --id "YOUR CARD ID0"</pre>
+      </div></li>
+    </ol>
+    <section class="phone-mine">
+      <div class="phone-copy">
+        <h3>Mine with an Android phone</h3>
+        <p>Turn a spare Android phone (Android 8 or newer) into a Cinder miner. It mines while it's plugged in and pauses when it gets warm.</p>
+        <ol class="mini-steps">
+          <li>Factory reset the phone. This erases everything on it.</li>
+          <li>On the first welcome screen, tap the same spot 6 times. A QR scanner opens.</li>
+          <li>Connect to Wi-Fi if it asks, then scan this code.</li>
+          <li>The phone installs Cinder and sets itself up. Type your card ID and plug it in.</li>
+        </ol>
+        <p class="muted">Cinder manages the phone while it mines. "Release this phone" in the app hands it back.</p>
+      </div>
+      <figure class="qr"><img src="phone/setup-miner.svg" alt="Setup code that turns a reset Android phone into a Cinder miner" width="300" height="300">
+        <figcaption>Scan from the phone's welcome screen after a reset.</figcaption></figure>
+    </section>
+    <div class="msg warn">This is testnet. Coins here are for building and testing, and the chain may be reset before a public launch.</div>
+  </div>
+</div>
+
+<!-- ============================================================ WALLET -->
+<div data-view="wallet" hidden>
+  <div class="wrap page" id="wallet-root"></div>
+</div>
+
+<!-- ============================================================ JOBS -->
+<div data-view="jobs" hidden>
+  <div class="wrap page" id="jobs-root"></div>
+</div>
+
+<!-- ============================================================ LOANS -->
+<div data-view="loans" hidden>
+  <div class="wrap page" id="loans-root"></div>
+</div>
+
+<!-- ============================================================ CHECKOUT -->
+<div data-view="checkout" hidden>
+  <div class="wrap page" id="checkout-root"></div>
+</div>
+
+<!-- ============================================================ EXPLORER -->
+<div data-view="explorer" hidden>
+  <div class="wrap page">
+    <div class="page-head">
+      <h2>Explorer.</h2>
+      <form class="search" id="search" role="search">
+        <input id="q" placeholder="Card ID, block height, block hash or receipt number" aria-label="Search the chain" autocomplete="off" spellcheck="false">
+        <button class="btn" type="submit">Search</button>
+      </form>
+    </div>
+    <div id="explore-root"></div>
+  </div>
+</div>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Cinder testnet. Open source, no pre-mine. CDR is not exchanged for dollars here.</span>
+    <span id="foot-node"></span>
+  </div>
+</footer>
+
+<dialog id="sppdlg">
+  <form method="dialog" id="sppform">
+    <h3 id="spp-title">Confirm with your SPP</h3>
+    <p class="muted" id="spp-what"></p>
+    <label class="f" for="spp-in">SPP <span class="hint">The 6-character payment code from the back of your card.</span>
+      <input id="spp-in" class="pin" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+    <div id="spp-msg"></div>
+    <div class="row"><button class="btn hi" value="ok" id="spp-ok">Confirm</button><button class="btn ghost" value="cancel" formnovalidate>Cancel</button></div>
+  </form>
+</dialog>
+
+<dialog id="nodedlg">
+  <form method="dialog" id="nodeform">
+    <h3>Connect to a node</h3>
+    <p class="muted">This page reads the chain from a Cinder node. Use your own, or any public one you trust.</p>
+    <label class="f" for="nodeurl">Node address
+      <input id="nodeurl" placeholder="http://localhost:8642" autocomplete="off" spellcheck="false">
+    </label>
+    <div class="row"><button class="btn" value="save">Connect</button><button class="btn ghost" value="cancel" formnovalidate>Cancel</button></div>
+  </form>
+</dialog>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
