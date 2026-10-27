@@ -65,7 +65,7 @@ val copyCinderPython by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("generated/cinder-python"))
 }
 val copyCinderSite by tasks.registering(Sync::class) {
-    from(rootProject.file("../website"))
+    from(rootProject.file("../website")) { exclude("phone/*.apk") }
     into(layout.buildDirectory.dir("generated/cinder-assets/website"))
 }
 tasks.named("preBuild") { dependsOn(copyCinderPython, copyCinderSite) }
