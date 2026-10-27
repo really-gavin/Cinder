@@ -41,6 +41,7 @@ class ShopActivity : Activity(), NfcAdapter.ReaderCallback {
     private var paid = false
     private var statusView: TextView? = null
     private var nfc: NfcAdapter? = null
+    private var iphone = false      // true: act as a tag for an iPhone instead of reading Android phones
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,12 +52,12 @@ class ShopActivity : Activity(), NfcAdapter.ReaderCallback {
         askPrice()
     }
 
-    override fun onResume() { super.onResume(); if (req != null && !paid) listen() }
-    override fun onPause() { super.onPause(); nfc?.disableReaderMode(this); ui.removeCallbacksAndMessages(null) }
+    override fun onResume() { super.onResume(); if (req != null && !paid) { listen(); if (iphone) req?.let { NdefTag.offer(this, "${Wallet.SITE}#pay-${it.to}-${it.amount}-${it.ref}") } } }
+    override fun onPause() { super.onPause(); nfc?.disableReaderMode(this); NdefTag.stop(this); ui.removeCallbacksAndMessages(null) }
 
     private fun askPrice() {
-        req = null; paid = false
-        nfc?.disableReaderMode(this)
+        req = null; paid = false; iphone = false
+        nfc?.disableReaderMode(this); NdefTag.stop(this)
         body.removeAllViews()
         body.addView(big("Take payments", 34f))
         body.addView(text("Payments go to your card, ${Core.formatId(wallet.id)}.", Ui.DUST).apply { setPadding(0, dp(8), 0, dp(20)) })
@@ -101,6 +102,22 @@ class ShopActivity : Activity(), NfcAdapter.ReaderCallback {
             setImageBitmap(Ui.qr(link, 720)); adjustViewBounds = true
             layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
         })
+        if (hasNfc) {
+            val btn = button("Customer has an iPhone") {}
+            btn.setOnClickListener {
+                iphone = !iphone
+                btn.text = if (iphone) "Customer has an Android phone" else "Customer has an iPhone"
+                if (iphone) {
+                    nfc?.disableReaderMode(this)
+                    NdefTag.offer(this, link)
+                    setStatus("Hold the top edge of their iPhone against the back of this phone. They tap the notice that appears.", Ui.HIVIS, Ui.INK)
+                } else {
+                    NdefTag.stop(this); listen()
+                    setStatus("Waiting for payment…", Ui.SLAB, Ui.PAPER)
+                }
+            }
+            body.addView(btn)
+        }
         body.addView(button("New charge") { askPrice() })
         setStatus("Waiting for payment…", Ui.SLAB, Ui.PAPER)
         listen()
@@ -111,7 +128,7 @@ class ShopActivity : Activity(), NfcAdapter.ReaderCallback {
     }
 
     private fun listen() {
-        nfc?.enableReaderMode(this, this,
+        if (!iphone) nfc?.enableReaderMode(this, this,
             NfcAdapter.FLAG_READER_NFC_A or NfcAdapter.FLAG_READER_NFC_B or NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK, null)
         poll()
     }

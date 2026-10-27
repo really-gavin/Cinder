@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="tap_to_pay">Cinder tap to pay</string>
+    <string name="payment_request">Cinder payment request</string>
 </resources>

@@ -60,5 +60,18 @@
                 android:name="android.nfc.cardemulation.host_apdu_service"
                 android:resource="@xml/tap_to_pay" />
         </service>
+
+        <!-- Request by tap: looks like an NFC tag so an iPhone can read the pay link. -->
+        <service
+            android:name=".NdefTagService"
+            android:exported="true"
+            android:permission="android.permission.BIND_NFC_SERVICE">
+            <intent-filter>
+                <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.nfc.cardemulation.host_apdu_service"
+                android:resource="@xml/ndef_tag" />
+        </service>
     </application>
 </manifest>
