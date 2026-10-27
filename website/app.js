@@ -1129,7 +1129,11 @@ function route() {
   if (current === 'checkout' && view !== 'checkout') stopWatching();
   current = view;
   $$('[data-view]').forEach(el => { el.hidden = el.dataset.view !== view; });
-  $$('.nav a').forEach(a => a.getAttribute('href') === '#' + view ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
+  $$('.nav a, .tabbar a').forEach(a => a.getAttribute('href') === '#' + view ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
+  const moreOn = ['start', 'checkout', 'explorer'].includes(view);
+  if ($('#more-btn')) { moreOn ? $('#more-btn').setAttribute('aria-current', 'page') : $('#more-btn').removeAttribute('aria-current'); }
+  $$('#more a').forEach(a => a.getAttribute('href') === '#' + view ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
+  if ($('#more')) { $('#more').hidden = true; $('#more-btn').setAttribute('aria-expanded', 'false'); }
   if (view === 'home') { paintWall(); paintCurve(); }
   if (view === 'wallet') renderWallet();
   if (view === 'jobs') renderJobs();
@@ -1155,6 +1159,9 @@ async function tick() {
 }
 
 document.addEventListener('click', e => {
+  const mb = e.target.closest('#more-btn');
+  if (mb) { const m = $('#more'); m.hidden = !m.hidden; mb.setAttribute('aria-expanded', String(!m.hidden)); return; }
+  if ($('#more') && !$('#more').hidden && !e.target.closest('#more')) { $('#more').hidden = true; $('#more-btn').setAttribute('aria-expanded', 'false'); }
   const cr = e.target.closest('[data-copy-req]');
   if (cr && card.intent) {
     const it = card.intent;

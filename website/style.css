@@ -410,3 +410,31 @@ button, .btn, .nav a, .netpill { touch-action: manipulation; -webkit-tap-highlig
 .flipslot .card { animation: cardflip .28s ease-out; }
 @keyframes cardflip { from { transform: perspective(700px) rotateY(80deg); opacity: .4; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .flipslot .card { animation: none; } }
+
+/* ---------------------------------------------------------------- phone tab bar */
+.tabbar, .more { display: none; }
+@media (max-width: 640px) {
+  .bar .nav { display: none; }
+  .bar .wrap { justify-content: space-between; }
+  .brand b { display: inline; }
+  .tabbar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    background: var(--bar); color: var(--bar-ink); border-top: 1px solid color-mix(in srgb, var(--bar-ink) 18%, transparent);
+    padding: 6px max(6px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px)); }
+  .tabbar a, .tabbar button { display: grid; justify-items: center; align-content: center; gap: 3px; min-height: 50px; padding: 4px 2px; border: 0; background: none;
+    color: color-mix(in srgb, var(--bar-ink) 62%, transparent); font: 600 11px/1 var(--body); text-decoration: none; border-radius: 4px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .tabbar svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .tabbar button svg circle { fill: currentColor; stroke: none; }
+  .tabbar [aria-current="page"] { color: var(--hivis); }
+  .tabbar [aria-current="page"] svg { stroke: var(--hivis); }
+  .tabbar [aria-current="page"] svg circle { fill: var(--hivis); }
+  .more { display: grid; position: fixed; right: max(10px, env(safe-area-inset-right, 0px)); bottom: calc(72px + env(safe-area-inset-bottom, 0px)); z-index: 21;
+    min-width: 200px; background: var(--bar); color: var(--bar-ink); border: 1px solid color-mix(in srgb, var(--bar-ink) 25%, transparent); border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .35); overflow: hidden; }
+  .more[hidden] { display: none; }
+  .more a { padding: 15px 18px; font-weight: 600; font-size: 16px; text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--bar-ink) 14%, transparent); }
+  .more a:last-child { border-bottom: 0; }
+  .more a[aria-current="page"] { background: var(--hivis); color: var(--hivis-ink); }
+  body { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+}
+@media print { .tabbar, .more { display: none !important; } }
