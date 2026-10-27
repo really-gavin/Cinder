@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cinder Phone</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 24'%3E%3Cpath fill='%23f3d317' fill-rule='evenodd' d='M0 0h34v24H0zM5 5v14h10V5zm14 0v14h10V5z'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Big+Shoulders+Stencil+Display:wght@800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="../style.css">
+<style>
+  .ph { display: grid; gap: 28px; padding-block: 40px 72px; max-width: 760px; }
+  .ph .steps > li { padding-block: 22px; }
+  .ph .big-btn { font-size: 18px; padding: 16px 22px; }
+  .ph .two-ways { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+  .ph .way { display: grid; gap: 12px; align-content: start; }
+  .ph .way img { width: 100%; max-width: 260px; }
+  @media (max-width: 700px) { .ph .two-ways { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="wrap">
+    <a class="brand" href="../#home" aria-label="Cinder home">
+      <svg viewBox="0 0 34 24" aria-hidden="true"><path fill="#f3d317" fill-rule="evenodd" d="M0 0h34v24H0zM5 5v14h10V5zm14 0v14h10V5z"/></svg>
+      <b>CINDER</b>
+    </a>
+    <nav class="nav" aria-label="Main"><a href="../#start">Get started</a><a href="../#wallet">Wallet</a></nav>
+  </div>
+</header>
+
+<main class="wrap ph">
+  <!-- Opened from a setup code (#setup=…) -->
+  <section id="linked" hidden>
+    <h2 id="l-title">Set up this phone.</h2>
+    <p class="lede" id="l-lede"></p>
+    <div id="l-desktop" class="msg warn" hidden>Open this page on the Android phone you want to set up. Scan this code with its camera:
+      <div id="l-qr" style="max-width:240px;margin-top:12px"></div></div>
+    <ol class="steps" id="l-steps">
+      <li><div>
+        <h3>Install the Cinder app</h3>
+        <p>Your phone may ask whether your browser can install apps. Allow it, then come back to this page.</p>
+        <div><a class="btn hi big-btn" href="cinder-phone.apk" download>Download Cinder (22 MB)</a></div>
+      </div></li>
+      <li><div>
+        <h3>Open it in Cinder</h3>
+        <p id="l-open-p">This sets the app up with your settings.</p>
+        <div><a class="btn big-btn" id="l-open" href="#">Open in Cinder</a></div>
+      </div></li>
+    </ol>
+    <p class="muted" id="l-private" hidden>This link has your network key in it. Don't share it.</p>
+  </section>
+
+  <!-- Plain visit -->
+  <section id="plain">
+    <h2>Cinder on your phone.</h2>
+    <p class="lede">An Android phone can mine Cinder or run a node. It mines only while plugged in and pauses when it gets warm.</p>
+    <div class="two-ways">
+      <div class="panel way">
+        <h3>Just install the app</h3>
+        <p>Keeps everything on the phone. Install it, open it, pick Mine Cinder and type your card ID.</p>
+        <div><a class="btn hi" href="cinder-phone.apk" download>Download Cinder (22 MB)</a></div>
+        <p class="muted" style="font-size:14px">Android 8 or newer.</p>
+      </div>
+      <div class="panel way">
+        <h3>Full setup on a spare phone</h3>
+        <p>Factory reset it, tap the welcome screen 6 times, scan this. The phone becomes a dedicated Cinder miner.</p>
+        <img src="setup-miner.svg" alt="Setup code that turns a reset Android phone into a Cinder miner" width="260" height="260">
+      </div>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+import qrcode from '../vendor/qrcode.js';
+
+const $ = s => document.querySelector(s);
+const m = location.hash.match(/setup=([A-Za-z0-9_-]+)/);
+let setup = null;
+if (m) {
+  try { setup = JSON.parse(atob(m[1].replace(/-/g, '+').replace(/_/g, '/'))); } catch {}
+}
+if (setup && (setup.mode === 'miner' || setup.mode === 'node')) {
+  $('#plain').hidden = true;
+  $('#linked').hidden = false;
+  const node = setup.mode === 'node';
+  $('#l-title').textContent = node ? 'Make this phone a Cinder node.' : 'Make this phone a Cinder miner.';
+  $('#l-lede').textContent = node
+    ? 'It keeps a full copy of the network and shares it with everyone. Keep it plugged in and on Wi-Fi.'
+    : 'It mines while plugged in and pauses when it gets warm. You only need the app; no reset.';
+  $('#l-private').hidden = !node || !setup.announce_key;
+  const apk = new URL('cinder-phone.apk', location.href).href;
+  $('#l-open').href = `intent://setup?d=${m[1]}#Intent;scheme=cinderphone;package=app.cinder.phone;` +
+    `S.browser_fallback_url=${encodeURIComponent(apk)};end`;
+  if (!/Android/i.test(navigator.userAgent)) {
+    $('#l-desktop').hidden = false;
+    const q = qrcode(0, 'M'); q.addData(location.href); q.make();
+    $('#l-qr').innerHTML = q.createSvgTag({ cellSize: 6, margin: 4, scalable: true });
+  }
+}
+</script>
+</body>
+</html>

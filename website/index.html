@@ -148,17 +148,16 @@
     <section class="phone-mine">
       <div class="phone-copy">
         <h3>Mine with an Android phone</h3>
-        <p>Turn a spare Android phone (Android 8 or newer) into a Cinder miner. It mines while it's plugged in and pauses when it gets warm.</p>
-        <ol class="mini-steps">
-          <li>Factory reset the phone. This erases everything on it.</li>
-          <li>On the first welcome screen, tap the same spot 6 times. A QR scanner opens.</li>
-          <li>Connect to Wi-Fi if it asks, then scan this code.</li>
-          <li>The phone installs Cinder and sets itself up. Type your card ID and plug it in.</li>
-        </ol>
-        <p class="muted">Cinder manages the phone while it mines. "Release this phone" in the app hands it back.</p>
+        <p>Any Android phone (Android 8 or newer) can mine Cinder. It mines while it's plugged in and pauses when it gets warm. There are two ways to set it up.</p>
+        <p><b>Just the app.</b> Scan the first code with the phone's camera, install Cinder, tap Open in Cinder, and type your card ID.</p>
+        <p><b>Full setup on a spare phone.</b> Factory reset it (this erases everything), tap the same spot on the welcome screen 6 times, connect to Wi-Fi, and scan the second code. The phone becomes a dedicated miner. "Release this phone" in the app hands it back.</p>
       </div>
-      <figure class="qr"><img src="phone/setup-miner.svg" alt="Setup code that turns a reset Android phone into a Cinder miner" width="300" height="300">
-        <figcaption>Scan from the phone's welcome screen after a reset.</figcaption></figure>
+      <div class="qr-pair">
+        <figure class="qr"><img src="phone/install-miner.svg" alt="Code that opens the Cinder phone page to install the miner app" width="220" height="220">
+          <figcaption>Just the app: scan with the camera</figcaption></figure>
+        <figure class="qr"><img src="phone/setup-miner.svg" alt="Setup code for a factory-reset Android phone" width="220" height="220">
+          <figcaption>Full setup: scan from the welcome screen</figcaption></figure>
+      </div>
     </section>
     <div class="msg warn">This is testnet. Coins here are for building and testing, and the chain may be reset before a public launch.</div>
   </div>

@@ -312,9 +312,11 @@ table.ledger.act .mono-id { white-space: nowrap; font-size: 13px; }
 }
 
 /* ---------------------------------------------------------------- phone mining */
-.phone-mine { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 320px); gap: 32px; align-items: center;
+.phone-mine { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 460px); gap: 32px; align-items: center;
   border-top: 2px solid var(--ink); padding-top: 28px; }
 .phone-copy { display: grid; gap: 12px; min-width: 0; }
 .mini-steps { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
 .qr img { width: 100%; max-width: 300px; height: auto; display: block; border: 1px solid var(--mortar); background: var(--qr-bg); }
 @media (max-width: 860px) { .phone-mine { grid-template-columns: minmax(0, 1fr); } }
+.qr-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.qr-pair img { max-width: 220px; }

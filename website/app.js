@@ -1,7 +1,8 @@
 // Cinder website: home, card wallet, jobs, loans, explorer.
 import * as X from './cindercrypto.js';
 import qrcode from './vendor/qrcode.js';
-import { NODES } from './config.js';
+import { NODES, DISCOVERY } from './config.js';
+import { discoverNode } from './discover.js';
 
 const { fmtCndr, parseCndr, formatId, normalizeId, isValidId } = X;
 const INITIAL_REWARD = 40, COOLING = 525_600, DAY = 1440, REVIEW = DAY, MAX_REJECTS = 2;
@@ -54,9 +55,11 @@ async function api(path, opts = {}) {
     return j;
   } finally { clearTimeout(t); }
 }
+let lastFind = Date.now();
 async function findNode() {
   const saved = store.get('node');
-  const tries = [saved, ...NODES, location.protocol.startsWith('http') ? location.origin : null, 'http://localhost:8642'].filter(Boolean);
+  const found = NODES.length ? null : await discoverNode(DISCOVERY);
+  const tries = [saved, ...NODES, found, location.protocol.startsWith('http') ? location.origin : null, 'http://localhost:8642'].filter(Boolean);
   for (const base of [...new Set(tries)]) {
     API = base.replace(/\/$/, '');
     try { status = await api('/api/status'); return true; } catch {}
@@ -942,7 +945,11 @@ function route() {
 }
 async function tick() {
   const before = status?.tip;
-  try { status = await api('/api/status'); } catch { status = null; }
+  try { status = await api('/api/status'); } catch {
+    status = null;
+    // The node phone's address can change; look it up again now and then.
+    if (Date.now() - lastFind > 30_000) { lastFind = Date.now(); await findNode(); }
+  }
   paintStatus();
   if (!status || status.tip === before) return;
   if (current === 'home') { paintWall(); paintCurve(); }

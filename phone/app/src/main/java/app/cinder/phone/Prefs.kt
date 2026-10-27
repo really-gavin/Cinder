@@ -31,6 +31,10 @@ class Prefs(context: Context) {
     var peers: String                       // comma separated
         get() = p.getString("peers", "") ?: ""
         set(v) = p.edit().putString("peers", v).apply()
+    /** Signs this node's public address. Comes from your node setup code. */
+    var announceKey: String
+        get() = p.getString("announce_key", "") ?: ""
+        set(v) = p.edit().putString("announce_key", v.trim()).apply()
     var onlyWhileCharging: Boolean
         get() = p.getBoolean("only_charging", true)
         set(v) = p.edit().putBoolean("only_charging", v).apply()
@@ -49,6 +53,14 @@ class Prefs(context: Context) {
         s("tunnel_token")?.let { tunnelToken = it }
         s("public_url")?.let { publicUrl = it }
         s("peers")?.let { peers = it }
+        s("announce_key")?.let { announceKey = it }
+    }
+
+    /** Same settings, from a setup link opened on the phone. */
+    fun saveJson(j: org.json.JSONObject) {
+        val b = android.os.PersistableBundle()
+        j.keys().forEach { k -> b.putString(k, j.optString(k)) }
+        saveExtras(b)
     }
 
     companion object {

@@ -51,9 +51,49 @@ class MainActivity : Activity() {
         root.addView(body)
         setContentView(scroll)
         render()
+        handleSetupLink(intent)
     }
 
-    override fun onResume() { super.onResume(); CinderService.start(this); tick() }
+    override fun onNewIntent(intent: android.content.Intent) { super.onNewIntent(intent); handleSetupLink(intent) }
+
+    /** cinderphone://setup?d=… opened from the Cinder phone page. */
+    private fun handleSetupLink(i: android.content.Intent?) {
+        val uri = i?.data ?: return
+        if (uri.scheme != "cinderphone") return
+        setIntent(android.content.Intent())
+        val json = try {
+            org.json.JSONObject(String(java.util.Base64.getUrlDecoder().decode(uri.getQueryParameter("d") ?: "")))
+        } catch (e: Exception) { null }
+        val mode = json?.optString("mode")
+        if (json == null || (mode != "miner" && mode != "node")) {
+            AlertDialog.Builder(this).setMessage("That setup link is damaged. Open it again from the Cinder phone page.")
+                .setPositiveButton("OK", null).show(); return
+        }
+        val what = if (mode == "node") "a Cinder node" else "a Cinder miner"
+        AlertDialog.Builder(this).setTitle("Set up this phone as $what?")
+            .setMessage(if (mode == "node") "It will keep a copy of the network and share it with everyone. It works best plugged in and on Wi-Fi."
+                        else "It will mine while plugged in and pause when it gets warm.")
+            .setPositiveButton("Set up") { _, _ ->
+                CinderService.stop(this)
+                prefs.saveJson(json); prefs.running = true
+                CinderService.start(this); askForBackground(); render()
+            }
+            .setNegativeButton("Cancel", null).show()
+    }
+
+    /** Phones that just installed the app (not fully set up) need two OKs to run all day. */
+    private fun askForBackground() {
+        if (Setup.isManaged(this)) return
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1)
+        }
+    }
+
+    private fun backgroundAllowed() =
+        getSystemService(android.os.PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
+
+    override fun onResume() { super.onResume(); CinderService.start(this); render(); tick() }
     override fun onPause() { super.onPause(); ui.removeCallbacksAndMessages(null) }
 
     // ------------------------------------------------------------- screens
@@ -71,9 +111,9 @@ class MainActivity : Activity() {
     private fun chooseScreen() {
         body.addView(big("Set up this phone", 34f))
         body.addView(text("Pick what this phone does for the Cinder network. You can change it later.", DUST).also { it.setPadding(0, dp(8), 0, dp(20)) })
-        body.addView(button("Mine Cinder", primary = true) { prefs.mode = "miner"; prefs.running = true; CinderService.start(this); render() })
+        body.addView(button("Mine Cinder", primary = true) { prefs.mode = "miner"; prefs.running = true; CinderService.start(this); askForBackground(); render() })
         body.addView(gap(10))
-        body.addView(button("Run a node") { prefs.mode = "node"; prefs.running = true; CinderService.start(this); render() })
+        body.addView(button("Run a node") { prefs.mode = "node"; prefs.running = true; CinderService.start(this); askForBackground(); render() })
     }
 
     private fun minerScreen() {
@@ -106,37 +146,47 @@ class MainActivity : Activity() {
     private fun nodeScreen() {
         statusView = big("…", 30f).also { body.addView(it) }
         body.addView(gap(16))
-        body.addView(panel(row("Block"), row("Peers"), row("On this Wi-Fi"), row("Public address"), row("Tunnel")))
-        body.addView(gap(22))
-        body.addView(label("Public address"))
-        body.addView(text("The address the tunnel serves, like https://node.yourdomain.com", DUST))
+        body.addView(panel(row("Block"), row("Peers"), row("On this Wi-Fi"), row("Public address"), row("Everyone finds it")))
+        if (prefs.announceKey.isBlank()) {
+            body.addView(gap(14))
+            body.addView(text("This phone doesn't have your network key yet, so miners and the website can't find it. Open your private node setup link on this phone to add it.", BAD))
+        }
+        body.addView(gap(18))
+        body.addView(text("The public address is made for you, free, and can change when the phone restarts. The phone tells everyone the new one automatically.", DUST))
+        body.addView(gap(18))
+        body.addView(startStop())
+        body.addView(gap(14))
+
+        // Optional: a fixed address on your own domain.
+        val adv = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = if (prefs.tunnelToken.isBlank()) View.GONE else View.VISIBLE }
+        body.addView(button(if (prefs.tunnelToken.isBlank()) "Use my own domain (optional)" else "My own domain") {
+            adv.visibility = if (adv.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        })
+        body.addView(adv)
+        adv.addView(gap(12))
+        adv.addView(label("Public address"))
+        adv.addView(text("Like https://node.yourdomain.com", DUST))
         val pub = edit(prefs.publicUrl, "https://node.yourdomain.com", InputType.TYPE_TEXT_VARIATION_URI)
-        body.addView(pub)
-        body.addView(gap(12))
-        body.addView(label("Cloudflare tunnel token"))
-        body.addView(text("From Cloudflare: Zero Trust > Networks > Tunnels > your tunnel > the long token in the install command.", DUST))
+        adv.addView(pub)
+        adv.addView(label("Cloudflare tunnel token"))
+        adv.addView(text("Leave empty to use the free automatic address.", DUST))
         val tok = edit(if (prefs.tunnelToken.isNotBlank()) "••••••••" else "", "Paste the token", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
-        body.addView(tok)
-        body.addView(button("Paste from clipboard") {
+        adv.addView(tok)
+        adv.addView(button("Paste from clipboard") {
             val clip = getSystemService(ClipboardManager::class.java).primaryClip
             val t = clip?.getItemAt(0)?.coerceToText(this)?.toString()?.trim().orEmpty()
             val m = Regex("eyJ[A-Za-z0-9_\\-=]{40,}").find(t)       // works with the whole install command too
             tok.setText(m?.value ?: t)
         })
-        body.addView(gap(10))
-        val msg = text("", DUST); body.addView(msg)
-        body.addView(button("Save", primary = true) {
+        val msg = text("", DUST); adv.addView(msg)
+        adv.addView(button("Save", primary = true) {
             val url = pub.text.toString().trim()
             if (url.isNotEmpty() && !url.startsWith("https://")) { msg.setTextColor(BAD); msg.text = "The public address starts with https://"; return@button }
-            val changedUrl = url.trimEnd('/') != prefs.publicUrl
             prefs.publicUrl = url
             val t = tok.text.toString()
             if (t != "••••••••") { prefs.tunnelToken = t; CinderService.instance?.tunnel?.restart() }
-            msg.setTextColor(GOOD)
-            msg.text = if (changedUrl) "Saved. Restart the node (Stop, then Start) so other nodes learn the new address." else "Saved."
+            msg.setTextColor(GOOD); msg.text = "Saved."
         })
-        body.addView(gap(18))
-        body.addView(startStop())
     }
 
     private fun startStop(): View = button(if (prefs.running) "Stop" else "Start") {
@@ -162,6 +212,14 @@ class MainActivity : Activity() {
                     .setNegativeButton("Cancel", null).show()
             })
         } else if (prefs.mode != null) {
+            if (!backgroundAllowed()) {
+                box.addView(text("Android may stop Cinder to save battery. Allow it to run in the background so it keeps going.", DUST))
+                box.addView(button("Let Cinder run in the background", primary = true) {
+                    startActivity(android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        android.net.Uri.parse("package:$packageName")))
+                })
+                box.addView(gap(14))
+            }
             box.addView(button("Change what this phone does") { CinderService.stop(this); prefs.mode = null; render() })
         }
         return box
@@ -206,16 +264,26 @@ class MainActivity : Activity() {
                 set("Block", s?.optInt("height")?.let { String.format(Locale.US, "%,d", it) } ?: "—")
                 set("Peers", s?.optJSONArray("peers")?.length()?.toString() ?: "—")
                 set("On this Wi-Fi", localIp()?.let { "http://$it:${NodeRunner.PORT}" } ?: "Not on Wi-Fi")
-                set("Public address", prefs.publicUrl.ifBlank { "Not set" })
                 val t = svc?.tunnel
-                set("Tunnel", when {
-                    prefs.tunnelToken.isBlank() -> "Not set up"
-                    t == null -> "Starting…"
-                    t.state == "Connected" -> "Connected"
-                    else -> "${t.state} ${t.lastLine}".trim()
+                set("Public address", svc?.publicAddress() ?: when {
+                    !prefs.running -> "—"
+                    t == null || !t.connected -> "Opening… ${t?.lastLine.orEmpty()}".trim()
+                    else -> "Waiting for an address"
+                })
+                val a = svc?.announced
+                set("Everyone finds it", when {
+                    prefs.announceKey.isBlank() -> "No network key"
+                    svc?.announceError != null -> svc.announceError!!
+                    a != null -> "Yes, posted ${ago(a.second)}"
+                    else -> "Not yet"
                 })
             }
         }
+    }
+
+    private fun ago(ms: Long): String {
+        val m = (System.currentTimeMillis() - ms) / 60_000
+        return if (m < 1) "just now" else "$m min ago"
     }
 
     private fun localIp(): String? {

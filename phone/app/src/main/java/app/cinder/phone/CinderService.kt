@@ -41,12 +41,13 @@ class CinderService : Service() {
             "miner" -> {
                 val m = miner ?: Miner(
                     nodeUrl = ::minerNode, cardId = { prefs.cardId }, canMine = ::pauseReason,
-                    log = { Log.i("Cinder", "miner: $it") }).also { miner = it }
+                    log = { Log.i("Cinder", "miner: $it"); if (it.startsWith("template:")) forgetNode() }).also { miner = it }
                 m.start()
             }
             "node" -> {
                 (node ?: NodeRunner(this, prefs).also { node = it }).start()
                 (tunnel ?: Tunnel(this) { prefs.tunnelToken }.also { tunnel = it }).start()
+                startAnnouncing()
             }
         }
         return START_STICKY
@@ -61,15 +62,52 @@ class CinderService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    // ------------------------------------------------------------- node: tell everyone where it is
+    /** This node's public address: your own domain if set, else the quick tunnel's. */
+    fun publicAddress(): String? =
+        prefs.publicUrl.takeIf { it.isNotBlank() && prefs.tunnelToken.isNotBlank() } ?: tunnel?.quickUrl
+
+    @Volatile var announced: Pair<String, Long>? = null; private set
+    @Volatile var announceError: String? = null; private set
+    private var announcing = false
+
+    private fun startAnnouncing() {
+        if (announcing) return
+        announcing = true
+        kotlin.concurrent.thread(name = "cinder-announce", isDaemon = true) {
+            while (instance === this) {
+                val url = publicAddress()
+                val key = prefs.announceKey
+                val last = announced
+                val due = last == null || last.first != url || System.currentTimeMillis() - last.second > 20 * 60_000
+                if (key.isBlank()) announceError = "This phone doesn't have the network key"
+                else if (url != null && tunnel?.connected == true && due) {
+                    try { Discovery.announce(key, url); announced = url to System.currentTimeMillis(); announceError = null }
+                    catch (e: Exception) { announceError = e.message ?: "couldn't post the address" }
+                }
+                try { Thread.sleep(15_000) } catch (_: InterruptedException) { }
+            }
+        }
+    }
+
     // ------------------------------------------------------------- miner rules
-    /** The node to mine on: the one set on this phone, else the one the website lists. */
+    /**
+     * The node to mine on: one typed on this phone, else the address the node
+     * phone announced, else the one the website's config.js lists.
+     */
     private fun minerNode(): String? {
         prefs.node.takeIf { it.isNotBlank() }?.let { return it }
-        siteNode?.let { (url, at) -> if (System.currentTimeMillis() - at < 10 * 60_000) return url }
-        val url = Net.nodeFromSite(prefs.site) ?: return null
+        siteNode?.let { (url, at) -> if (System.currentTimeMillis() - at < 5 * 60_000) return url }
+        val url = runCatching { Discovery.find() }.getOrNull()
+            ?: runCatching { Net.nodeFromSite(prefs.site) }.getOrNull()
+            ?: runCatching { Net.nodeFromSite(prefs.site.trimEnd('/') + "/website") }.getOrNull()
+            ?: return null
         siteNode = url to System.currentTimeMillis()
         return url
     }
+
+    /** Forget the cached node so the miner looks again (after errors). */
+    fun forgetNode() { siteNode = null }
 
     /** Phones mine only when it's safe: plugged in and not hot. */
     fun pauseReason(): String? {
