@@ -320,3 +320,80 @@ table.ledger.act .mono-id { white-space: nowrap; font-size: 13px; }
 @media (max-width: 860px) { .phone-mine { grid-template-columns: minmax(0, 1fr); } }
 .qr-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .qr-pair img { max-width: 220px; }
+
+/* ---------------------------------------------------------------- all devices */
+/* Grid and flex children can't shrink below their content unless told to. A wide table inside
+   one stretched the whole page on phones. */
+main, [data-view], .page, .page > *, .page-head, .page-head > *, #explore-root, #explore-root > *,
+.panel > *, .cols > *, .split > *, .hero > *, .checkout > * { min-width: 0; }
+.page-head { grid-template-columns: minmax(0, 1fr); }
+:where(.panel, #explore-root > div, .page-head, .gate, .item) { grid-template-columns: minmax(0, 1fr); }
+.scroll { max-width: 100%; -webkit-overflow-scrolling: touch; }
+table.ledger td, table.ledger th { overflow-wrap: anywhere; }
+img, svg, canvas, video { max-width: 100%; }
+html { scroll-padding-top: 72px; }
+button, .btn, .nav a, .netpill { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+/* Fingers: 44px is the smallest comfortable target on a touch screen. */
+@media (pointer: coarse) {
+  .nav a { padding: 12px 12px; min-height: 44px; display: inline-flex; align-items: center; box-sizing: border-box; }
+  .brand { min-height: 44px; min-width: 44px; }
+  .netpill { min-height: 40px; padding-inline: 12px; }
+  .btn.sm { padding: 12px 14px; min-height: 44px; }
+  .brick, tr[data-href] td { min-height: 44px; }
+  a.mono-id { display: inline-block; padding-block: 12px; }
+  main p a, main li a, .band a:not(.btn), .page a:not(.btn):not(.brick):not(.mono-id) { padding-block: 10px; display: inline-block; }
+  input, select, textarea { min-height: 48px; }
+}
+
+/* Tablets */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .wrap { padding-inline: max(24px, env(safe-area-inset-left, 0px)) max(24px, env(safe-area-inset-right, 0px)); }
+  .bar .wrap { flex-wrap: wrap; }
+  .nav { order: 3; width: 100%; margin: 0; overflow-x: auto; scrollbar-width: none; }
+  .nav::-webkit-scrollbar { display: none; }
+  .netpill { margin-left: auto; }
+  h1 { font-size: clamp(56px, 11vw, 96px); }
+}
+
+/* Phones turned sideways: there's little height, so the bar shouldn't follow you down. */
+@media (max-height: 520px) and (orientation: landscape) {
+  .bar { position: static; }
+  body::before { display: none; }
+  .page { padding-block: 24px 48px; }
+  section.band { padding-block: 40px; }
+  .hero { padding-block: 24px; }
+  dialog { max-height: calc(100dvh - 24px); overflow: auto; }
+}
+
+/* Small phones */
+@media (max-width: 360px) {
+  .wrap { padding-inline: max(12px, env(safe-area-inset-left, 0px)) max(12px, env(safe-area-inset-right, 0px)); }
+  h1 { font-size: 50px; }
+  h2 { font-size: 36px; }
+  .btns .btn { flex: 1 1 100%; justify-content: center; }
+  .plate dd { font-size: 28px; }
+  .panel { padding: 16px; }
+  .search { flex-wrap: wrap; }
+  .search .btn { flex: 1 1 100%; justify-content: center; }
+}
+@media (max-width: 480px) {
+  .search .btn { padding-inline: 16px; }
+  dialog { padding: 18px; max-height: calc(100dvh - 24px); overflow: auto; }
+  .btns .btn { flex: 1 1 auto; justify-content: center; }
+}
+
+/* Big monitors and TVs: keep lines readable, but use the room. */
+@media (min-width: 1600px) {
+  html { font-size: 112.5%; }
+  .wrap { max-width: 1280px; }
+}
+@media (min-width: 2200px) {
+  html { font-size: 125%; }
+  .wrap { max-width: 1440px; }
+}
+
+@media print {
+  .bar, .netpill, .btns { display: none !important; }
+  body { background: #fff; }
+}
