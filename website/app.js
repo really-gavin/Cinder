@@ -1191,3 +1191,20 @@ await findNode();
 paintStatus();
 route();
 setInterval(tick, 5000);
+
+// Keep a Home Screen app current: if the published page is newer than the one on screen, refresh the
+// cached files once and reload. (GitHub Pages lets browsers keep files for 10 minutes.)
+(async () => {
+  try {
+    const mine = document.querySelector('meta[name=build]')?.content;
+    if (!mine || !location.protocol.startsWith('http')) return;
+    const html = await (await fetch(location.pathname, { cache: 'no-store' })).text();
+    const theirs = (html.match(/name="build" content="([^"]+)"/) || [])[1];
+    if (!theirs || theirs === mine) return;
+    let done = false;
+    try { done = sessionStorage.getItem('cinder.reloaded') === theirs; sessionStorage.setItem('cinder.reloaded', theirs); } catch {}
+    if (done) return;
+    await Promise.all(['style.css', 'app.js', 'cindercrypto.js', 'discover.js', 'config.js', 'pay.js', location.pathname].map(f => fetch(f, { cache: 'reload' }).catch(() => {})));
+    location.reload();
+  } catch {}
+})();
