@@ -193,7 +193,9 @@ function setupStart(root) {
     ${card.intent ? `<div class="msg warn" style="display:grid;gap:10px">A shop asked you to pay ${fmtCndr(card.intent.amount)} CDR.
       ${isAndroid ? `<span>Have Cinder Wallet on this phone? Pay with it. Otherwise make a card here, or bring yours back with your 12 words.</span>
       <div class="row"><a class="btn hi sm" href="${esc(appPayLink(card.intent))}">Pay with Cinder Wallet</a><a class="btn ghost sm" href="phone/#wallet">Get the app</a></div>`
-      : 'You need a card with CDR on it first. Already have one on another device? Pay from there, or bring it here with your 12 words.'}</div>` : ''}</div>
+      : `You need a card with CDR on it first. Already have one on another device? Pay from there, or bring it here with your 12 words.${isIOS && !standalone ? `
+      <span>Your card is in the Cinder app on your Home Screen? Copy this request, open the app, and tap Paste payment request.</span>
+      <div class="row"><button class="btn ghost sm" type="button" data-copy-req>Copy request</button></div>` : ''}`}</div>` : ''}</div>
     <div class="cols">
       <form class="panel heavy" id="new-card"><h3>Make a new card</h3>
         <label class="f" for="pin1">Choose a 6-digit PIN<input id="pin1" class="pin" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="new-password"></label>
@@ -781,10 +783,31 @@ function appPayLink(it) {
 }
 // A checkout QR opens #pay-<shop ID>-<ash>-<order code>. The wallet shows
 // the request at the top; paying sends it with the note "Order <code>".
+// iPhones open links from NFC taps in Safari, never in a Home Screen app, and the two don't share
+// data. So the Home Screen app can pick a request up from the clipboard.
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+function parsePayRequest(text) {
+  const m = String(text || '').match(/#?pay-([0-9A-Z]{16})-(\d{1,16})-([0-9A-Z]{6})/);
+  return m && isValidId(m[1]) && Number(m[2]) > 0 ? { to: m[1], amount: Number(m[2]), ref: m[3] } : null;
+}
 function paintIntent() {
   const slot = $('#w-intent'), it = card.intent;
   if (!slot) return;
-  if (!it) { slot.innerHTML = ''; return; }
+  if (!it) {
+    slot.innerHTML = standalone && isIOS ? `<div class="msg" style="display:grid;gap:10px;margin-bottom:12px">
+      <span>Paying a shop or a phone that tapped you? If it opened in Safari, tap Copy request there, then paste it here.</span>
+      <div class="row"><button class="btn ghost sm" type="button" id="i-paste">Paste payment request</button></div><div id="i-pmsg"></div></div>` : '';
+    const b = $('#i-paste');
+    if (b) b.onclick = async () => {
+      try {
+        const req = parsePayRequest(await navigator.clipboard.readText());
+        if (!req) { $('#i-pmsg').innerHTML = '<p class="muted">There isn’t a Cinder payment request on the clipboard.</p>'; return; }
+        card.intent = req; paintIntent();
+      } catch { $('#i-pmsg').innerHTML = '<p class="muted">Couldn’t read the clipboard. Allow paste when iOS asks.</p>'; }
+    };
+    return;
+  }
   slot.innerHTML = `${isAndroid ? `<div class="msg" style="display:grid;gap:10px;margin-bottom:12px">
       <span>Paying from your phone? The Cinder Wallet app pays with your fingerprint.</span>
       <div class="row"><a class="btn hi sm" href="${esc(appPayLink(it))}">Pay with Cinder Wallet</a><a class="btn ghost sm" href="phone/#wallet">Get the app</a></div></div>` : ''}
@@ -796,7 +819,14 @@ function paintIntent() {
       </div>
       <div class="row"><button class="btn" type="button" id="i-pay">Pay ${fmtCndr(it.amount)} CDR</button><button class="btn ghost sm" type="button" id="i-no">Not now</button></div>
       <div id="i-msg" style="grid-column:1/-1"></div>
-    </div>`;
+    </div>${isIOS && !standalone ? `<div class="msg" style="display:grid;gap:10px;margin-top:12px">
+      <span>Use the Cinder app on your Home Screen instead? Copy this request, open the app, and tap Paste payment request.</span>
+      <div class="row"><button class="btn ghost sm" type="button" id="i-copy">Copy request</button></div></div>` : ''}`;
+  const cp = $('#i-copy');
+  if (cp) cp.onclick = async () => {
+    const link = `${location.origin}${location.pathname}#pay-${it.to}-${it.amount}-${it.ref}`;
+    try { await navigator.clipboard.writeText(link); cp.textContent = 'Copied. Open the Cinder app'; } catch { cp.textContent = 'Couldn’t copy'; }
+  };
   $('#i-no').onclick = () => { card.intent = null; history.replaceState(null, '', '#wallet'); paintIntent(); };
   $('#i-pay').onclick = async () => {
     const bad = t => { $('#i-msg').innerHTML = `<div class="msg bad">${t}</div>`; };
@@ -976,6 +1006,13 @@ async function tick() {
 }
 
 document.addEventListener('click', e => {
+  const cr = e.target.closest('[data-copy-req]');
+  if (cr && card.intent) {
+    const it = card.intent;
+    navigator.clipboard.writeText(`${location.origin}${location.pathname}#pay-${it.to}-${it.amount}-${it.ref}`)
+      .then(() => { cr.textContent = 'Copied. Open the Cinder app'; }, () => { cr.textContent = 'Couldn’t copy'; });
+    return;
+  }
   const tr = e.target.closest('tr[data-href]');
   if (tr && !e.target.closest('a')) { location.hash = tr.dataset.href; return; }
   if (e.target.closest('[data-node]') || e.target.closest('#netpill')) {
