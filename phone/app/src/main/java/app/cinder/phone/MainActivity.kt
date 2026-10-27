@@ -301,6 +301,7 @@ class MainActivity : Activity() {
                 !prefs.running -> "Stopped"
                 !CardId.isValid(prefs.cardId) -> "Enter your card ID below"
                 m == null -> "Starting…"
+                m.status.startsWith("Waiting for your card") -> "${m.status}. ${m.lastError.orEmpty()}"
                 else -> "${m.status}  ·  ${rate(m.hashrate)}  ·  ${m.found.get()} found"
             })
         }

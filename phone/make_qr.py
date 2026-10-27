@@ -29,8 +29,12 @@ SITE = "https://really-gavin.github.io/Cinder/"
 
 
 def make_extras(mode, site, node=None, public_url=None, tunnel_token=None, peers=None, card=None,
-                announce_key=None):
+                announce_key=None, also_mine=False, also_node=False):
     extras = {"mode": mode, "site": site}
+    if also_mine:
+        extras["also_mine"] = "1"
+    if also_node:
+        extras["also_node"] = "1"
     for k, v in (("node", node), ("public_url", public_url), ("tunnel_token", tunnel_token),
                  ("peers", peers), ("card", card), ("announce_key", announce_key)):
         if v:
@@ -72,6 +76,8 @@ def main():
     ap.add_argument("--tunnel-token", help="node: Cloudflare tunnel token (keep this code private)")
     ap.add_argument("--peers", help="node: other nodes, comma separated")
     ap.add_argument("--announce-key-file", help="node: JSON file with announce_private_key")
+    ap.add_argument("--mine", action="store_true", help="node: also mine (use with --card)")
+    ap.add_argument("--also-node", action="store_true", help="miner: also run a node")
     ap.add_argument("--wifi", help="Wi-Fi name the phone joins during setup")
     ap.add_argument("--wifi-password")
     a = ap.parse_args()
@@ -82,7 +88,7 @@ def main():
         key = json.load(open(a.announce_key_file))["announce_private_key"]
     elif a.mode == "node":
         raise SystemExit("a node needs --announce-key-file so miners and the website can find it")
-    extras = make_extras(a.mode, a.site, a.node, a.public_url, a.tunnel_token, a.peers, a.card, key)
+    extras = make_extras(a.mode, a.site, a.node, a.public_url, a.tunnel_token, a.peers, a.card, key, a.mine, a.also_node)
     out = a.out or a.mode
 
     d = setup_json(a.apk_url, checksum, extras, a.wifi, a.wifi_password)

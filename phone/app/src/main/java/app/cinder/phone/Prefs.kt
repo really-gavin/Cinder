@@ -66,6 +66,8 @@ class Prefs(context: Context) {
         s("public_url")?.let { publicUrl = it }
         s("peers")?.let { peers = it }
         s("announce_key")?.let { announceKey = it }
+        s("also_mine")?.let { alsoMine = it == "1" || it == "true" }
+        s("also_node")?.let { alsoNode = it == "1" || it == "true" }
     }
 
     /** Same settings, from a setup link opened on the phone. */

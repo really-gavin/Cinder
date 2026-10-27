@@ -31,6 +31,7 @@ class Miner(
     val hashes = AtomicLong()
     val found = AtomicLong()
     @Volatile var height = 0; private set
+    private var tries = 0
 
     private var threads = listOf<Thread>()
     private val lock = Object()
@@ -70,7 +71,7 @@ class Miner(
                     hexToBytes(tpl.getString("target")), block.getInt("height"))
                 job = j
                 height = j.height - 1
-                lastError = null
+                lastError = null; tries = 0
                 status = "Mining block ${j.height}"
                 synchronized(lock) { lock.notifyAll() }
                 // Work on it until it's solved, the chain moves on, or 10 seconds pass.
@@ -87,9 +88,20 @@ class Miner(
             } catch (e: Exception) {
                 job = null
                 lastError = e.message ?: e.javaClass.simpleName
-                status = "Can't reach the node"
-                log("template: $lastError")
-                sleep(5000)
+                tries++
+                val local = node.contains("127.0.0.1") || node.contains("localhost")
+                when {
+                    // The node answered but said no: the card isn't on the network yet.
+                    e is Net.NodeError && lastError!!.contains("registered") -> {
+                        status = "Waiting for your card to be set up"
+                        lastError = "Open Cinder Wallet (or the website wallet) once so your card is registered, then this starts by itself."
+                    }
+                    e is Net.NodeError -> status = "The node said no. Trying again…"
+                    local -> status = "Waiting for the node to start… (try $tries)"
+                    else -> status = "Can't reach the node. Trying again… (try $tries)"
+                }
+                if (tries == 1 || tries % 10 == 0) log("template: $lastError")
+                sleep(if (local) 2000 else 4000)
             }
         }
     }
