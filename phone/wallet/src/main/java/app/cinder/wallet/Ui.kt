@@ -93,6 +93,25 @@ object Ui {
         return f
     }
 
+    /** The back of the card: magnetic stripe and the SPP, like the website's. */
+    fun Context.cardBack(spp: String): View {
+        val f = FrameLayout(this)
+        f.background = GradientDrawable().apply { setColor(INK); setStroke(dp(1), MORTAR); cornerRadius = dp(14).toFloat() }
+        f.clipToOutline = true
+        val col = column(0)
+        col.addView(View(this).apply { setBackgroundColor(Color.BLACK); layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, dp(40)).apply { topMargin = dp(22) } })
+        col.addView(FrameLayout(this).apply {
+            setPadding(dp(16), 0, dp(16), 0); setBackgroundColor(PAPER)
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, dp(48)).apply { setMargins(dp(20), dp(18), dp(20), 0) }
+            addView(big(spp, 28f, INK).apply { letterSpacing = 0.2f; layoutParams = FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.CENTER_VERTICAL or Gravity.END) })
+        })
+        col.addView(gap(20))
+        col.addView(rowOf(text("SPP: confirms every payment", DUST, 12f).apply { layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f) }, text("Tap to flip back", DUST, 12f))
+            .apply { setPadding(dp(20), 0, dp(20), dp(26)) })
+        f.addView(col)
+        return f
+    }
+
     fun qr(text: String, size: Int): Bitmap {
         val m = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, size, size, mapOf(EncodeHintType.MARGIN to 2))
         val px = IntArray(size * size) { if (m[it % size, it / size]) INK else Color.WHITE }

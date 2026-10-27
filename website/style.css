@@ -405,3 +405,8 @@ button, .btn, .nav a, .netpill { touch-action: manipulation; -webkit-tap-highlig
 .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .tiles .btn { justify-content: center; min-height: 54px; box-sizing: border-box; }
 @media (max-width: 640px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.flipslot { cursor: pointer; }
+.flipslot .card { animation: cardflip .28s ease-out; }
+@keyframes cardflip { from { transform: perspective(700px) rotateY(80deg); opacity: .4; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .flipslot .card { animation: none; } }

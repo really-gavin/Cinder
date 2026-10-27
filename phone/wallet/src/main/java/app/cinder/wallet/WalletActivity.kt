@@ -15,6 +15,7 @@ import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.CheckBox
 import android.widget.GridLayout
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -25,6 +26,7 @@ import app.cinder.wallet.Ui.big
 import app.cinder.wallet.Ui.box
 import app.cinder.wallet.Ui.button
 import app.cinder.wallet.Ui.card
+import app.cinder.wallet.Ui.cardBack
 import app.cinder.wallet.Ui.column
 import app.cinder.wallet.Ui.dp
 import app.cinder.wallet.Ui.field
@@ -45,6 +47,7 @@ class WalletActivity : Activity() {
     private var stateView: TextView? = null
     private var listView: LinearLayout? = null
     private var onHome = false
+    private var flipBack = Runnable { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -207,7 +210,20 @@ class WalletActivity : Activity() {
     private fun home() {
         clear(); onHome = true
         body.addView(brand()); body.addView(gap(20))
-        body.addView(card(wallet.id, "Testnet")); body.addView(gap(18))
+        val flip = FrameLayout(this)
+        var back = false
+        val front = card(wallet.id, "Testnet")
+        flip.addView(front)
+        flip.setOnClickListener {
+            back = !back
+            flip.removeAllViews(); flip.addView(if (back) cardBack(wallet.spp()) else card(wallet.id, "Testnet"))
+            flip.alpha = 0.4f; flip.animate().alpha(1f).setDuration(220).start()
+            ui.removeCallbacks(flipBack)
+            if (back) { flipBack = Runnable { if (back && onHome) flip.performClick() }; ui.postDelayed(flipBack, 30_000) }
+        }
+        body.addView(flip)
+        body.addView(text("Tap the card to see your SPP.", Ui.DUST, 13f).apply { setPadding(0, dp(6), 0, 0) })
+        body.addView(gap(14))
         body.addView(text("Balance", Ui.DUST))
         balanceView = big("…", 56f).also { body.addView(it) }
         stateView = text("", Ui.DUST, 14f).also { body.addView(it) }

@@ -388,12 +388,13 @@ function walletMain(root) {
   root.innerHTML = `
     <div id="w-intent"></div>
     <div class="cols" style="align-items:center">
-      ${cardFront(card.saved.id, 'Testnet')}
+      <div id="w-cardslot" class="flipslot" role="button" tabindex="0" aria-label="Flip the card to see your SPP">${cardFront(card.saved.id, 'Testnet')}</div>
       <div style="display:grid;gap:10px">
         <p class="muted">Balance</p>
         <div class="balance" id="w-bal">…<small>CDR</small></div>
         <div id="w-state"></div>
-        <div class="row"><button class="btn sm" type="button" id="w-copy">Copy card ID</button><a class="btn ghost sm" href="#id-${esc(card.saved.id)}">View in explorer</a></div>
+        <div class="row"><button class="btn sm" type="button" id="w-copy">Copy card ID</button><button class="btn sm" type="button" id="w-flip">Show SPP</button><a class="btn ghost sm" href="#id-${esc(card.saved.id)}">View in explorer</a></div>
+        <div id="w-sppmsg"></div>
       </div>
     </div>
     <div class="tiles">
@@ -423,7 +424,37 @@ function walletMain(root) {
     </div>
     <div id="w-foot"></div>`;
   $('#w-copy').onclick = e => copy(formatId(card.saved.id), e.currentTarget);
-  $('#w-lock').onclick = () => { Object.assign(card, { unlocked: false, pin: null }); renderWallet(); };
+  // Flip the card to see the SPP on the back, like a real card. It flips back by itself.
+  let flipTimer = null;
+  const flipCard = async () => {
+    const slot = $('#w-cardslot'), btn = $('#w-flip'), note = $('#w-sppmsg');
+    if (!slot) return;
+    clearTimeout(flipTimer); note.innerHTML = '';
+    if (slot.dataset.side === 'back') {
+      slot.innerHTML = cardFront(card.saved.id, 'Testnet'); slot.dataset.side = 'front'; btn.textContent = 'Show SPP';
+      return;
+    }
+    btn.disabled = true;
+    try {
+      if (!card.spp || card.sppFor !== card.saved.id) {
+        let spp = null;
+        if (card.saved.sppBox) { try { spp = await X.unlockSpp(card.saved.sppBox, card.pin); } catch {} }
+        if (!spp) {
+          btn.textContent = 'Looking it up…';
+          spp = await X.findSpp(card.saved.box, card.pin);
+          if (spp) { card.saved.sppBox = await X.lockSpp(spp, card.pin); store.set('card', card.saved); }
+        }
+        if (!spp) { note.innerHTML = `<div class="msg warn">This card was made before 3-digit SPPs, so it can’t be shown here. Restore it from your 12 words to get one.</div>`; btn.textContent = 'Show SPP'; return; }
+        card.spp = spp; card.sppFor = card.saved.id;
+      }
+      slot.innerHTML = cardBack(card.spp); slot.dataset.side = 'back'; btn.textContent = 'Hide SPP';
+      flipTimer = setTimeout(() => { if (slot.dataset.side === 'back') flipCard(); }, 30_000);
+    } finally { btn.disabled = false; }
+  };
+  $('#w-flip').onclick = flipCard;
+  $('#w-cardslot').onclick = flipCard;
+  $('#w-cardslot').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flipCard(); } };
+  $('#w-lock').onclick = () => { Object.assign(card, { unlocked: false, pin: null, spp: null }); renderWallet(); };
   $('#w-rm').onclick = () => confirmForget($('#w-foot'));
   $('#w-xfer').onclick = () => transferPanel($('#w-foot'));
   $('#w-net').onclick = () => { $('#nodeurl').value = API || ''; $('#nodedlg').showModal(); };
