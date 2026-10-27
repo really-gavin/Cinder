@@ -121,7 +121,8 @@ class MainActivity : Activity() {
         statusView = big("…", 30f).also { body.addView(it) }
         body.addView(gap(16))
         body.addView(panel(
-            row("Speed"), row("Blocks found"), row("Mining to"), row("Network"), row("Battery")))
+            *listOfNotNull(row("Speed"), row("Blocks found"), row("Mining to"), row("Network"), row("Battery"),
+                if (prefs.alsoNode) row("Node") else null).toTypedArray()))
         body.addView(gap(22))
         body.addView(label("Your card ID"))
         body.addView(text("Rewards go to this card. It's on the front of your card in the Cinder wallet.", DUST))
@@ -134,23 +135,67 @@ class MainActivity : Activity() {
             else { prefs.cardId = id; card.setText(CardId.format(id)); msg.text = ""; toastRow("Saved") }
         })
         body.addView(gap(18))
+        body.addView(chargingSwitch())
+        body.addView(gap(14))
         body.addView(Switch(this).apply {
-            text = "Only mine while charging"; setTextColor(PAPER); textSize = 16f
-            isChecked = prefs.onlyWhileCharging
-            setOnCheckedChangeListener { _, on -> prefs.onlyWhileCharging = on }
+            text = "Also run a node on this phone"; setTextColor(PAPER); textSize = 16f
+            isChecked = prefs.alsoNode
+            setOnCheckedChangeListener { _, on ->
+                prefs.alsoNode = on
+                if (on) CinderService.start(this@MainActivity)
+                else ui.postDelayed({ android.os.Process.killProcess(android.os.Process.myPid()) }, 300)   // the node lives in this process
+                render()
+            }
         })
-        body.addView(text("Mining makes phones hot. It always pauses above 40°C.", DUST))
+        body.addView(text("Mine and keep a copy of the network at the same time. Uses more battery and data.", DUST))
+        if (prefs.alsoNode && prefs.announceKey.isBlank())
+            body.addView(text("This phone doesn't have your network key, so it works as a node on this Wi-Fi but can't be found from outside.", DUST))
         body.addView(gap(18))
         body.addView(startStop())
     }
 
+    private fun chargingSwitch(): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        addView(Switch(context).apply {
+            text = "Only mine while charging"; setTextColor(PAPER); textSize = 16f
+            isChecked = prefs.onlyWhileCharging
+            setOnCheckedChangeListener { _, on -> prefs.onlyWhileCharging = on }
+        })
+        addView(text("Off: it mines on battery too, and pauses at 20% battery or 40°C.", DUST))
+    }
+
+
     private fun nodeScreen() {
         statusView = big("…", 30f).also { body.addView(it) }
         body.addView(gap(16))
-        body.addView(panel(row("Block"), row("Peers"), row("On this Wi-Fi"), row("Public address"), row("Everyone finds it")))
+        body.addView(panel(*listOfNotNull(row("Block"), row("Peers"), row("On this Wi-Fi"), row("Public address"), row("Everyone finds it"),
+            if (prefs.alsoMine) row("Mining") else null).toTypedArray()))
         if (prefs.announceKey.isBlank()) {
             body.addView(gap(14))
             body.addView(text("This phone doesn't have your network key yet, so miners and the website can't find it. Open your private node setup link on this phone to add it.", BAD))
+        }
+        body.addView(gap(18))
+        body.addView(Switch(this).apply {
+            text = "Also mine on this phone"; setTextColor(PAPER); textSize = 16f
+            isChecked = prefs.alsoMine
+            setOnCheckedChangeListener { _, on ->
+                prefs.alsoMine = on
+                if (on) CinderService.start(this@MainActivity) else CinderService.instance?.stopMiner()
+                render()
+            }
+        })
+        if (prefs.alsoMine) {
+            body.addView(text("Rewards go to this card:", DUST).also { it.setPadding(0, dp(6), 0, 0) })
+            val card = edit(CardId.format(prefs.cardId), "XXXX XXXX XXXX XXXX", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS)
+            body.addView(card)
+            val cmsg = text("", BAD); body.addView(cmsg)
+            body.addView(button("Save card ID") {
+                val id = CardId.normalize(card.text.toString())
+                if (!CardId.isValid(id)) cmsg.text = "That card ID isn't right. It's 16 letters and numbers; one looks mistyped."
+                else { prefs.cardId = id; card.setText(CardId.format(id)); cmsg.text = ""; toastRow("Saved") }
+            })
+            body.addView(gap(8))
+            body.addView(chargingSwitch())
         }
         body.addView(gap(18))
         body.addView(text("The public address is made for you, free, and can change when the phone restarts. The phone tells everyone the new one automatically.", DUST))
@@ -201,7 +246,7 @@ class MainActivity : Activity() {
         prefs.running = !prefs.running
         if (prefs.running) CinderService.start(this) else {
             CinderService.stop(this)
-            if (prefs.mode == "node") {
+            if (prefs.serves) {
                 // The node runs inside this app's process; stopping fully means a restart.
                 ui.postDelayed({ android.os.Process.killProcess(android.os.Process.myPid()) }, 300)
             }
@@ -241,6 +286,29 @@ class MainActivity : Activity() {
 
     private fun update() {
         val svc = CinderService.instance
+        if (prefs.mode == "node" && prefs.mines) {
+            val m = svc?.miner
+            set("Mining", when {
+                !prefs.running -> "Stopped"
+                !CardId.isValid(prefs.cardId) -> "Enter your card ID below"
+                m == null -> "Starting…"
+                else -> "${m.status}  ·  ${rate(m.hashrate)}  ·  ${m.found.get()} found"
+            })
+        }
+        if (prefs.mode == "miner" && prefs.alsoNode) {
+            if (prefs.running) thread {
+                try { nodeStatus = Net.getJson("http://127.0.0.1:${NodeRunner.PORT}/api/status", 2000); nodeError = null }
+                catch (e: Exception) { nodeStatus = null; nodeError = svc?.node?.crashed }
+            }
+            val s = nodeStatus
+            val a = svc?.announced
+            set("Node", when {
+                !prefs.running -> "Stopped"
+                s != null -> "Running, block ${s.optInt("height")}" + (if (a != null) ", found by everyone" else "")
+                nodeError != null -> "Stopped: $nodeError"
+                else -> "Starting…"
+            })
+        }
         when (prefs.mode) {
             "miner" -> {
                 val m = svc?.miner

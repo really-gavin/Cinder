@@ -24,6 +24,7 @@ class CinderService : Service() {
     private var wake: PowerManager.WakeLock? = null
     @Volatile private var siteNode: Pair<String, Long>? = null
     @Volatile private var hot = false
+    @Volatile private var low = false
 
     override fun onCreate() {
         super.onCreate()
@@ -37,18 +38,19 @@ class CinderService : Service() {
             wake = (getSystemService(POWER_SERVICE) as PowerManager)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "cinder:run").apply { acquire() }
         }
-        when (prefs.mode) {
-            "miner" -> {
-                val m = miner ?: Miner(
-                    nodeUrl = ::minerNode, cardId = { prefs.cardId }, canMine = ::pauseReason,
-                    log = { Log.i("Cinder", "miner: $it"); if (it.startsWith("template:")) forgetNode() }).also { miner = it }
-                m.start()
-            }
-            "node" -> {
-                (node ?: NodeRunner(this, prefs).also { node = it }).start()
-                (tunnel ?: Tunnel(this) { prefs.tunnelToken }.also { tunnel = it }).start()
-                startAnnouncing()
-            }
+        // A phone can do both at once: serve the network and mine.
+        if (prefs.serves) {
+            (node ?: NodeRunner(this, prefs).also { node = it }).start()
+            (tunnel ?: Tunnel(this) { prefs.tunnelToken }.also { tunnel = it }).start()
+            startAnnouncing()
+        }
+        if (prefs.mines) {
+            val m = miner ?: Miner(
+                // Mining on its own node phone: use the node in this same app.
+                nodeUrl = { if (prefs.mode == "node" || prefs.alsoNode) "http://127.0.0.1:${NodeRunner.PORT}" else minerNode() },
+                cardId = { prefs.cardId }, canMine = ::pauseReason,
+                log = { Log.i("Cinder", "miner: $it"); if (it.startsWith("template:")) forgetNode() }).also { miner = it }
+            m.start()
         }
         return START_STICKY
     }
@@ -59,6 +61,8 @@ class CinderService : Service() {
         instance = null
         super.onDestroy()
     }
+
+    fun stopMiner() { miner?.stop(); miner = null }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -109,14 +113,18 @@ class CinderService : Service() {
     /** Forget the cached node so the miner looks again (after errors). */
     fun forgetNode() { siteNode = null }
 
-    /** Phones mine only when it's safe: plugged in and not hot. */
+    /** Phones mine unless it's unsafe: too hot, or (unplugged) the battery is nearly flat. */
     fun pauseReason(): String? {
         val b = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return null
         val plugged = b.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
         val tempC = b.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) / 10.0
+        val level = b.getIntExtra(BatteryManager.EXTRA_LEVEL, 100) * 100 / maxOf(1, b.getIntExtra(BatteryManager.EXTRA_SCALE, 100))
         // Stop at 40 °C, start again under 37 °C.
         hot = if (hot) tempC >= 37.0 else tempC >= 40.0
         if (prefs.onlyWhileCharging && !plugged) return "Paused: plug in to mine"
+        // On battery: stop at 20%, start again at 30%, so it doesn't flap.
+        low = if (plugged) false else if (low) level < 30 else level <= 20
+        if (low) return "Paused: battery $level%. Plug in to keep mining"
         if (hot) return "Paused: cooling down (${"%.0f".format(tempC)}°C)"
         if (Build.VERSION.SDK_INT >= 29) {
             val status = (getSystemService(POWER_SERVICE) as PowerManager).currentThermalStatus
@@ -137,7 +145,11 @@ class CinderService : Service() {
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "Cinder", NotificationManager.IMPORTANCE_LOW))
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE)
-        val text = if (prefs.mode == "node") "Running a Cinder node" else "Cinder miner is on"
+        val text = when {
+            prefs.serves && prefs.mines -> "Running a Cinder node and mining"
+            prefs.serves -> "Running a Cinder node"
+            else -> "Cinder miner is on"
+        }
         val n = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat).setContentTitle("Cinder").setContentText(text)
             .setContentIntent(open).setOngoing(true).build()

@@ -36,9 +36,20 @@ class Prefs(context: Context) {
     var announceKey: String
         get() = p.getString("announce_key", "") ?: ""
         set(v) = p.edit().putString("announce_key", v.trim()).apply()
+    /** Off by default: the phone mines on battery too, and pauses itself when the battery gets low. */
     var onlyWhileCharging: Boolean
-        get() = p.getBoolean("only_charging", true)
-        set(v) = p.edit().putBoolean("only_charging", v).apply()
+        get() = p.getBoolean("only_charging_v2", false)
+        set(v) = p.edit().putBoolean("only_charging_v2", v).apply()
+    /** A node phone also mines (into the card above) at the same time. */
+    var alsoMine: Boolean
+        get() = p.getBoolean("also_mine", true)
+        set(v) = p.edit().putBoolean("also_mine", v).apply()
+    /** A mining phone also runs a node at the same time. */
+    var alsoNode: Boolean
+        get() = p.getBoolean("also_node", false)
+        set(v) = p.edit().putBoolean("also_node", v).apply()
+    val mines: Boolean get() = mode == "miner" || (mode == "node" && alsoMine)
+    val serves: Boolean get() = mode == "node" || (mode == "miner" && alsoNode)
     var running: Boolean
         get() = p.getBoolean("running", true)
         set(v) = p.edit().putBoolean("running", v).apply()
