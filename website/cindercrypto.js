@@ -225,4 +225,25 @@ export async function unlockEntropy(box, pin, spp) {
   const key = await deriveKey(`${pin}|${normalizeSpp(spp)}`, unhex(box.salt), ['decrypt']);
   return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unhex(box.iv) }, key, unhex(box.ct)));
 }
+// The SPP is also kept under the PIN alone, so a forgotten SPP can be shown again after the PIN.
+// (The SPP is a second check before money moves, not a second secret.)
+export async function lockSpp(spp, pin) {
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(`spp|${pin}`, salt, ['encrypt']);
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(spp));
+  return { salt: hex(salt), iv: hex(iv), ct: hex(new Uint8Array(ct)) };
+}
+export async function unlockSpp(sppBox, pin) {
+  const key = await deriveKey(`spp|${pin}`, unhex(sppBox.salt), ['decrypt']);
+  return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unhex(sppBox.iv) }, key, unhex(sppBox.ct)));
+}
+// Cards saved before that: with the PIN known, try every 3-digit SPP (about a minute worst case).
+export async function findSpp(box, pin, onProgress) {
+  for (let i = 0; i < 1000; i++) {
+    const spp = String(i).padStart(3, '0');
+    try { await unlockEntropy(box, pin, spp); return spp; } catch {}
+    if (onProgress && i % 10 === 0) onProgress(i / 1000);
+  }
+  return null;
+}
 export const normalizeSpp = s => String(s).toUpperCase().replace(/\s/g, '').replace(/O/g, '0').replace(/[IL]/g, '1');

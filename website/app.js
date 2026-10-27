@@ -149,6 +149,34 @@ function withSpp(what, fn) {
     $('#spp-what').innerHTML = what;
     input.value = ''; msg.innerHTML = ''; ok.disabled = false; ok.textContent = 'Confirm';
     dlg.showModal(); input.focus();
+    const find = $('#spp-find'), found = $('#spp-found'), pinIn = $('#spp-pin'), reveal = $('#spp-reveal');
+    find.hidden = true; found.innerHTML = '';
+    $('#spp-show').onclick = () => { find.hidden = false; pinIn.value = ''; pinIn.focus(); };
+    pinIn.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); reveal.click(); } };
+    reveal.onclick = async () => {
+      const wait = (card.lockUntil || 0) - Date.now();
+      if (wait > 0) return void (found.innerHTML = `<div class="msg bad">Too many wrong tries. Wait ${Math.ceil(wait / 1000)} seconds.</div>`);
+      const h = await X.pinHash(pinIn.value, card.saved.pin.salt);
+      if (h.hash !== card.saved.pin.hash) {
+        card.fails = (card.fails || 0) + 1;
+        if (card.fails >= 5) card.lockUntil = Date.now() + 30_000 * (card.fails - 4);
+        return void (found.innerHTML = `<div class="msg bad">Wrong PIN.</div>`);
+      }
+      card.fails = 0;
+      reveal.disabled = true;
+      try {
+        let spp = null;
+        if (card.saved.sppBox) { try { spp = await X.unlockSpp(card.saved.sppBox, pinIn.value); } catch {} }
+        if (!spp) {
+          found.innerHTML = `<div style="display:grid;gap:6px"><span class="muted">Looking it up. This can take up to a minute.</span><div class="progress"><i id="spp-bar" style="width:0%"></i></div></div>`;
+          spp = await X.findSpp(card.saved.box, pinIn.value, p => { const b = $('#spp-bar'); if (b) b.style.width = Math.round(p * 100) + '%'; });
+          if (spp) { card.saved.sppBox = await X.lockSpp(spp, pinIn.value); store.set('card', card.saved); }
+        }
+        if (!spp) return void (found.innerHTML = `<div class="msg warn">This card was made before 3-digit SPPs, so it can’t be looked up. Use your 12 words instead.</div>`);
+        found.innerHTML = `<div class="msg"><span class="muted">Your SPP is</span> <b style="font:800 34px var(--display);letter-spacing:.1em">${esc(spp)}</b></div>`;
+        input.value = spp; msg.innerHTML = '';
+      } finally { reveal.disabled = false; }
+    };
     $('#spp-forgot').onclick = () => { dlg.close(); resolve(null); card.recover = true; location.hash = '#wallet'; renderWallet(); };
     $('#sppform').onsubmit = async e => {
       if (e.submitter?.value !== 'ok') { resolve(null); return; }
@@ -249,7 +277,7 @@ function setupReveal(root, entropy, pin, isNew) {
   $('#finish').onclick = async () => {
     const btn = $('#finish'), msg = $('#reg-msg');
     btn.disabled = true;
-    card.saved = { id: keys.id, pub: keys.pub, pin: await X.pinHash(pin), box: await X.lockEntropy(entropy, pin, spp) };
+    card.saved = { id: keys.id, pub: keys.pub, pin: await X.pinHash(pin), box: await X.lockEntropy(entropy, pin, spp), sppBox: await X.lockSpp(spp, pin) };
     store.set('card', card.saved);
     Object.assign(card, { unlocked: true, pin, recover: false });
     try {

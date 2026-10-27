@@ -220,7 +220,12 @@
     <p class="muted" id="spp-what"></p>
     <label class="f" for="spp-in">SPP <span class="hint">The 3-digit payment code from the back of your card.</span>
       <input id="spp-in" class="pin" maxlength="7" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
-    <p class="muted" style="font-size:14px">Forgot it? <button type="button" class="linkbtn" id="spp-forgot">Get it back with your 12 words</button></p>
+    <p class="muted" style="font-size:14px">Forgot it? <button type="button" class="linkbtn" id="spp-show">Show my SPP with my PIN</button> or <button type="button" class="linkbtn" id="spp-forgot">use my 12 words</button></p>
+    <div id="spp-find" hidden style="display:grid;gap:8px">
+      <label class="f" for="spp-pin">Your PIN<input id="spp-pin" class="pin" inputmode="numeric" maxlength="6" autocomplete="off"></label>
+      <div><button type="button" class="btn sm" id="spp-reveal">Show my SPP</button></div>
+      <div id="spp-found"></div>
+    </div>
     <div id="spp-msg"></div>
     <div class="row"><button class="btn hi" value="ok" id="spp-ok">Confirm</button><button class="btn ghost" value="cancel" formnovalidate>Cancel</button></div>
   </form>
