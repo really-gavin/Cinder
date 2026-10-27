@@ -34,7 +34,7 @@ class Wallet(context: Context) {
 
     // ------------------------------------------------------------- making a card
     fun create(entropy: ByteArray, pin: String): String {
-        val spp = newSpp()
+        val spp = sppFromEntropy(entropy)
         val keys = Core.keysFromEntropy(entropy)
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         p.edit()
@@ -135,9 +135,11 @@ class Wallet(context: Context) {
         private const val ID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
         fun newEntropy() = ByteArray(16).also { SecureRandom().nextBytes(it) }
-        private fun newSpp(): String {
-            val r = ByteArray(6).also { SecureRandom().nextBytes(it) }
-            return r.joinToString("") { ID_ALPHABET[it.toInt() and 31].toString() }
+        /** 3 digits worked out from the card's secret, so the 12 words always bring the same SPP back. */
+        fun sppFromEntropy(entropy: ByteArray): String {
+            val d = java.security.MessageDigest.getInstance("SHA-256").digest("cinder-spp|".toByteArray(Charsets.UTF_8) + entropy)
+            val n = ((d[0].toLong() and 0xff) shl 24) or ((d[1].toLong() and 0xff) shl 16) or ((d[2].toLong() and 0xff) shl 8) or (d[3].toLong() and 0xff)
+            return (n % 1000).toString().padStart(3, '0')
         }
     }
 }

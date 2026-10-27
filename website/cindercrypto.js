@@ -142,9 +142,12 @@ export function keysFromEntropy(entropy) {
   return { priv, pub, id: idFromPub(pub) };
 }
 export const newEntropy = () => crypto.getRandomValues(new Uint8Array(16));
-export function newSpp() {
-  const r = crypto.getRandomValues(new Uint8Array(6));
-  return [...r].map(x => ID_ALPHABET[x & 31]).join('');
+/** The SPP is 3 digits, worked out from the card's secret (the same one the 12 words rebuild).
+ *  So restoring a card from its words brings the same SPP back; nothing extra to remember. */
+export function sppFromEntropy(entropy) {
+  const d = sha256(concat(enc.encode('cinder-spp|'), entropy));
+  const n = ((d[0] << 24) | (d[1] << 16) | (d[2] << 8) | d[3]) >>> 0;
+  return String(n % 1000).padStart(3, '0');
 }
 
 // ------------------------------------------------------------------ transactions

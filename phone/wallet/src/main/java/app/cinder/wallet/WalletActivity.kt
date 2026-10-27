@@ -112,7 +112,7 @@ class WalletActivity : Activity() {
         body.addView(big(if (isNew) "This is your card." else "Your card is back.", 32f)); body.addView(gap(16))
         body.addView(card(wallet.id, "Testnet")); body.addView(gap(16))
         body.addView(rowOf(text("SPP  ", Ui.DUST), big(spp, 26f, Ui.HIVIS).apply { letterSpacing = 0.2f }))
-        body.addView(text("Your payment code for the Cinder website. Payments in this app use your fingerprint instead.", Ui.DUST, 14f))
+        body.addView(text("Your 3-digit payment code for the Cinder website. Forgot it later? It is in the backup words screen, and your 12 words bring it back. Payments in this app use your fingerprint instead.", Ui.DUST, 14f))
         if (isNew) {
             body.addView(gap(20))
             body.addView(label("Your 12 backup words"))

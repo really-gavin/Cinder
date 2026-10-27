@@ -218,8 +218,9 @@
   <form method="dialog" id="sppform">
     <h3 id="spp-title">Confirm with your SPP</h3>
     <p class="muted" id="spp-what"></p>
-    <label class="f" for="spp-in">SPP <span class="hint">The 6-character payment code from the back of your card.</span>
-      <input id="spp-in" class="pin" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+    <label class="f" for="spp-in">SPP <span class="hint">The 3-digit payment code from the back of your card.</span>
+      <input id="spp-in" class="pin" maxlength="7" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>
+    <p class="muted" style="font-size:14px">Forgot it? <button type="button" class="linkbtn" id="spp-forgot">Get it back with your 12 words</button></p>
     <div id="spp-msg"></div>
     <div class="row"><button class="btn hi" value="ok" id="spp-ok">Confirm</button><button class="btn ghost" value="cancel" formnovalidate>Cancel</button></div>
   </form>

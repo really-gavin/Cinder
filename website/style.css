@@ -397,3 +397,7 @@ button, .btn, .nav a, .netpill { touch-action: manipulation; -webkit-tap-highlig
   .bar, .netpill, .btns { display: none !important; }
   body { background: #fff; }
 }
+
+.linkbtn { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.linkbtn:hover { color: var(--ink); text-decoration-thickness: 2px; }
+@media (pointer: coarse) { .linkbtn { padding-block: 10px; } }
