@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+    <uses-feature android:name="android.hardware.nfc.hce" android:required="false" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="Cinder Wallet"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Cinder"
+        android:usesCleartextTraffic="true">
+
+        <activity
+            android:name=".WalletActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- The pay sheet. Opens over whatever you're doing, like Apple Pay. -->
+        <activity
+            android:name=".PaySheetActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:taskAffinity="app.cinder.wallet.pay"
+            android:theme="@style/Theme.Cinder.Sheet"
+            android:windowSoftInputMode="adjustResize">
+            <!-- cinderpay://pay?to=…&amount=…&ref=…&name=… from shops and websites -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="cinderpay" android:host="pay" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".ShopActivity"
+            android:exported="false" />
+
+        <!-- Tap to pay: a shop's phone sends the payment request over NFC. -->
+        <service
+            android:name=".TapToPayService"
+            android:exported="true"
+            android:permission="android.permission.BIND_NFC_SERVICE">
+            <intent-filter>
+                <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.nfc.cardemulation.host_apdu_service"
+                android:resource="@xml/tap_to_pay" />
+        </service>
+    </application>
+</manifest>

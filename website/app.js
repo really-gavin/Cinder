@@ -190,7 +190,10 @@ function renderWallet() {
 function setupStart(root) {
   root.innerHTML = `<div class="page-head"><h2>Get your Cinder card.</h2>
     <p class="lede">Your card lives on this device. You choose a PIN; the card comes with an SPP for payments and 12 backup words in case you lose the device.</p>
-    ${card.intent ? `<div class="msg warn">A shop asked you to pay ${fmtCndr(card.intent.amount)} CDR. You need a card with CDR on it first. Already have one on another device? Pay from there, or bring it here with your 12 words.</div>` : ''}</div>
+    ${card.intent ? `<div class="msg warn" style="display:grid;gap:10px">A shop asked you to pay ${fmtCndr(card.intent.amount)} CDR.
+      ${isAndroid ? `<span>Have Cinder Wallet on this phone? Pay with it. Otherwise make a card here, or bring yours back with your 12 words.</span>
+      <div class="row"><a class="btn hi sm" href="${esc(appPayLink(card.intent))}">Pay with Cinder Wallet</a><a class="btn ghost sm" href="phone/#wallet">Get the app</a></div>`
+      : 'You need a card with CDR on it first. Already have one on another device? Pay from there, or bring it here with your 12 words.'}</div>` : ''}</div>
     <div class="cols">
       <form class="panel heavy" id="new-card"><h3>Make a new card</h3>
         <label class="f" for="pin1">Choose a 6-digit PIN<input id="pin1" class="pin" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="new-password"></label>
@@ -770,13 +773,22 @@ $('#search').onsubmit = async e => {
 };
 
 // ------------------------------------------------------------------ paying a shop (customer side)
+const isAndroid = /Android/i.test(navigator.userAgent);
+function appPayLink(it) {
+  const back = `${location.origin}${location.pathname}#pay-${it.to}-${it.amount}-${it.ref}-web`;
+  return `intent://pay?to=${it.to}&amount=${it.amount}&ref=${it.ref}#Intent;scheme=cinderpay;package=app.cinder.wallet;` +
+    `S.browser_fallback_url=${encodeURIComponent(back)};end`;
+}
 // A checkout QR opens #pay-<shop ID>-<ash>-<order code>. The wallet shows
 // the request at the top; paying sends it with the note "Order <code>".
 function paintIntent() {
   const slot = $('#w-intent'), it = card.intent;
   if (!slot) return;
   if (!it) { slot.innerHTML = ''; return; }
-  slot.innerHTML = `<div class="intent">
+  slot.innerHTML = `${isAndroid ? `<div class="msg" style="display:grid;gap:10px;margin-bottom:12px">
+      <span>Paying from your phone? The Cinder Wallet app pays with your fingerprint.</span>
+      <div class="row"><a class="btn hi sm" href="${esc(appPayLink(it))}">Pay with Cinder Wallet</a><a class="btn ghost sm" href="phone/#wallet">Get the app</a></div></div>` : ''}
+    <div class="intent">
       <div style="display:grid;gap:6px;min-width:0">
         <p>Pay the shop</p>
         <div class="co-amount sm">${fmtCndr(it.amount)}<small>CDR</small></div>
@@ -928,8 +940,12 @@ function route() {
   let view = h, arg = null;
   const m = h.match(/^(block|tx|id|job|loan)-(.+)$/);
   if (m) { view = 'explorer'; arg = m; }
-  const pm = h.match(/^pay-([0-9A-Z]{16})-(\d{1,16})-([0-9A-Z]{6})$/);
-  if (pm && isValidId(pm[1]) && Number(pm[2]) > 0) { card.intent = { to: pm[1], amount: Number(pm[2]), ref: pm[3] }; view = 'wallet'; }
+  const pm = h.match(/^pay-([0-9A-Z]{16})-(\d{1,16})-([0-9A-Z]{6})(-web)?$/);
+  if (pm && isValidId(pm[1]) && Number(pm[2]) > 0) {
+    card.intent = { to: pm[1], amount: Number(pm[2]), ref: pm[3] }; view = 'wallet';
+    // On Android, hand the payment to the Cinder Wallet app's pay sheet if it's installed.
+    if (!pm[4] && isAndroid) { try { location.href = appPayLink(card.intent); } catch {} }
+  }
   if (!['home', 'start', 'wallet', 'jobs', 'loans', 'checkout', 'explorer'].includes(view)) view = 'home';
   if (current === 'checkout' && view !== 'checkout') stopWatching();
   current = view;

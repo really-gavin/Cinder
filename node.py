@@ -341,6 +341,8 @@ def make_handler(node):
         def static(self, path):
             rel = os.path.normpath(path).lstrip("/\\") or "index.html"
             full = os.path.join(SITE, rel)
+            if os.path.isdir(full):
+                full = os.path.join(full, "index.html")
             if not full.startswith(SITE) or not os.path.isfile(full):
                 full = os.path.join(SITE, "index.html")
             with open(full, "rb") as f:

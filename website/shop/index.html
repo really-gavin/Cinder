@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ember Coffee Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Archivo:wght@400;600&display=swap">
+<style>
+  /* A pretend shop, to show Pay with Cinder on someone else's site. */
+  :root { --bg: #f6efe4; --fg: #2b1d14; --muted: #7a6656; --line: #e2d4c0; --accent: #b4532a; --card: #fffaf2; color-scheme: light; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1d1510; --fg: #f3e6d4; --muted: #b39d88; --line: #3a2b20; --accent: #e07a4c; --card: #261c15; color-scheme: dark; } }
+  :root[data-theme="dark"] { --bg: #1d1510; --fg: #f3e6d4; --muted: #b39d88; --line: #3a2b20; --accent: #e07a4c; --card: #261c15; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 "Archivo", system-ui, sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding-block: 28px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .demo { font-size: 14px; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 28px; }
+  .demo a { color: inherit; }
+  h1 { font: 800 clamp(40px, 7vw, 64px)/1 "Fraunces", Georgia, serif; margin: 0 0 6px; }
+  .lede { color: var(--muted); margin: 0 0 28px; }
+  .menu { display: grid; gap: 0; border-top: 1px solid var(--line); }
+  .item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 16px; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .item h3 { margin: 0; font: 600 20px "Fraunces", Georgia, serif; }
+  .item p { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+  .price { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .qty { display: flex; gap: 6px; align-items: center; }
+  .qty button { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--fg); font-size: 18px; cursor: pointer; }
+  .bag { margin-top: 28px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px; display: grid; gap: 14px; }
+  .total { display: flex; justify-content: space-between; font: 800 26px "Fraunces", Georgia, serif; }
+  .setup { font-size: 14px; color: var(--muted); display: grid; gap: 6px; }
+  .setup input { font: 15px ui-monospace, monospace; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); width: 100%; }
+  .thanks { background: var(--accent); color: #fff; padding: 14px 16px; border-radius: 10px; font-weight: 600; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="demo">This is a pretend shop showing how Pay with Cinder works on any website. <a href="../#start">Back to Cinder</a></p>
+  <h1>Ember Coffee</h1>
+  <p class="lede">Small-batch coffee. Pay in CDR.</p>
+  <div class="menu" id="menu"></div>
+  <div class="bag">
+    <div class="total"><span>Total</span><span id="total">0 CDR</span></div>
+    <div id="pay"></div>
+    <div id="thanks" hidden class="thanks"></div>
+    <label class="setup" for="shopid">Pays to this card ID (the shop's)
+      <input id="shopid" placeholder="XXXX XXXX XXXX XXXX" autocomplete="off" spellcheck="false"></label>
+  </div>
+</div>
+<script type="module">
+import { payButton } from '../pay.js';
+import { isValidId, normalizeId } from '../cindercrypto.js';
+
+const MENU = [
+  { name: 'Espresso', note: 'Double shot', price: 2 },
+  { name: 'Oat latte', note: '12 oz', price: 3.5 },
+  { name: 'Butter croissant', note: 'Baked this morning', price: 2.5 },
+];
+const qty = MENU.map(() => 0);
+const $ = s => document.querySelector(s);
+let shop = '';
+try { shop = localStorage.getItem('ember.shop') || ''; } catch {}
+$('#shopid').value = shop.match(/.{1,4}/g)?.join(' ') || '';
+$('#shopid').oninput = e => { shop = normalizeId(e.target.value); try { localStorage.setItem('ember.shop', shop); } catch {} paint(); };
+
+function paint() {
+  $('#menu').innerHTML = MENU.map((m, i) => `<div class="item"><div><h3>${m.name}</h3><p>${m.note}</p></div>
+    <span class="price">${m.price} CDR</span>
+    <div class="qty"><button data-i="${i}" data-d="-1" aria-label="One less ${m.name}">−</button><span>${qty[i]}</span><button data-i="${i}" data-d="1" aria-label="One more ${m.name}">+</button></div></div>`).join('');
+  const total = MENU.reduce((n, m, i) => n + m.price * qty[i], 0);
+  $('#total').textContent = `${total} CDR`;
+  if (!isValidId(shop)) $('#pay').innerHTML = '<span class="setup">Enter the shop\'s card ID below to try paying.</span>';
+  else if (!total) $('#pay').innerHTML = '<span class="setup">Add something to your order.</span>';
+  else payButton($('#pay'), { to: shop, amount: total, name: 'Ember Coffee', onPaid: () => {
+    $('#thanks').hidden = false; $('#thanks').textContent = 'Paid. Your order is in!'; qty.fill(0); paint();
+  } });
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('button[data-i]'); if (!b) return;
+  const i = +b.dataset.i; qty[i] = Math.max(0, qty[i] + +b.dataset.d); $('#thanks').hidden = true; paint();
+});
+qty[1] = 1; paint();
+</script>
+</body>
+</html>
