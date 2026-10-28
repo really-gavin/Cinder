@@ -38,7 +38,6 @@ class Wallet(context: Context) {
         val keys = Core.keysFromEntropy(entropy)
         p.edit()
             .putString("entropy", seal(entropy))
-            .putString("spp", seal(spp.toByteArray()))
             .putString("id", keys.id)
             .putLong("alert_since", System.currentTimeMillis() / 1000)
             .apply()
@@ -49,7 +48,8 @@ class Wallet(context: Context) {
 
     fun keys() = Core.keysFromEntropy(open(p.getString("entropy", null)!!))
     fun phrase() = Core.phraseFromEntropy(open(p.getString("entropy", null)!!), words)
-    fun spp() = String(open(p.getString("spp", null)!!))
+    /** Always worked out from the card's secret, so cards made by older versions show the 3-digit SPP too. */
+    fun spp() = sppFromEntropy(open(p.getString("entropy", null)!!))
 
     /** Seconds left on the lockout, 0 when the SPP can be tried. */
     fun lockSeconds(): Long = maxOf(0L, (p.getLong("lock_until", 0) - System.currentTimeMillis() + 999) / 1000)
