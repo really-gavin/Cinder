@@ -10,7 +10,7 @@ import javax.crypto.spec.SecretKeySpec
  * cinder/consensus.py exactly: keys, card IDs, backup words, transactions.
  */
 object Core {
-    const val CHAIN_ID = "cinder-testnet-2"
+    const val CHAIN_ID = "cinder-testnet-3"
     const val ASH = 100_000_000L
     private const val ID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
     const val REGISTER_WORK_BITS = 20

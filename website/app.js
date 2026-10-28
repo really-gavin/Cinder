@@ -5,7 +5,7 @@ import { NODES, DISCOVERY } from './config.js';
 import { discoverNode } from './discover.js';
 
 const { fmtCndr, parseCndr, formatId, normalizeId, isValidId } = X;
-const INITIAL_REWARD = 40, COOLING = 525_600, DAY = 1440, REVIEW = DAY, MAX_REJECTS = 2;
+const INITIAL_REWARD = 1, COOLING = 525_600, DAY = 1440, REVIEW = DAY, MAX_REJECTS = 2;
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 
@@ -75,8 +75,7 @@ function paintStatus() {
   $('#netpill').dataset.on = status ? '1' : '0';
   $('#netlabel').textContent = status ? `Block ${status.height.toLocaleString()}` : 'No node';
   $('#foot-node').textContent = status ? `Reading from ${API}` : `Can't reach a node at ${API}`;
-  $('#peer-hint').textContent = status && API !== location.origin ? API : 'http://SEED-NODE:8642';
-  if (!status) return;
+    if (!status) return;
   $('#s-height').textContent = status.height.toLocaleString();
   $('#s-supply').innerHTML = `${fmtCndr(status.supply, 0)} <small>CDR</small>`;
   $('#s-reward').innerHTML = `${fmtCndr(status.next_reward, 3)} <small>CDR</small>`;
@@ -109,14 +108,14 @@ function paintCurve() {
   for (let e = 0; e < years; e++) { const base = INITIAL_REWARD / 2 ** e; pts.push([e, base], [e + 1, base / 2]); }
   const line = pts.map(([a, b], i) => `${i ? 'L' : 'M'}${x(a).toFixed(1)},${y(b).toFixed(1)}`).join('');
   let g = '';
-  for (const r of [0, 10, 20, 30, 40]) g += `<line class="axis" x1="${L}" x2="${W - R}" y1="${y(r)}" y2="${y(r)}" stroke-opacity="${r ? .5 : 1}"/><text x="${L - 8}" y="${y(r) + 5}" text-anchor="end">${r}</text>`;
+  for (const r of [0, .25, .5, .75, 1]) g += `<line class="axis" x1="${L}" x2="${W - R}" y1="${y(r)}" y2="${y(r)}" stroke-opacity="${r ? .5 : 1}"/><text x="${L - 8}" y="${y(r) + 5}" text-anchor="end">${r}</text>`;
   for (let yr = 0; yr <= years; yr += 2) g += `<text x="${x(yr)}" y="${H - 12}" text-anchor="middle">${yr === 0 ? 'Launch' : `Year ${yr}`}</text>`;
   let now = '';
   if (status && status.height / COOLING <= years) {
     const xx = x(status.height / COOLING);
     now = `<line class="now" x1="${xx}" x2="${xx}" y1="${T}" y2="${y(0)}"/><text x="${xx + 8}" y="${T + 22}" style="fill:var(--ink)">You are here</text>`;
   }
-  $('#curve').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Block reward starts at 40 CDR and slides to half each year">
+  $('#curve').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Block reward starts at 1 CDR and slides to half each year">
     ${g}<path class="area" d="${line}L${x(years)},${y(0)}L${x(0)},${y(0)}Z"/><path class="line" d="${line}"/>${now}
     <text x="${L - 8}" y="${T - 8}" text-anchor="end" style="font-size:12px">CDR</text></svg>`;
 }

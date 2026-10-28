@@ -3,7 +3,7 @@
 import * as secp from './vendor/secp256k1.js';
 import WORDS from './vendor/words.js';
 
-export const CHAIN_ID = 'cinder-testnet-2';
+export const CHAIN_ID = 'cinder-testnet-3';
 export const ASH = 100_000_000;
 export const ID_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const REGISTER_WORK_BITS = 20, TX_WORK_BITS = 18;

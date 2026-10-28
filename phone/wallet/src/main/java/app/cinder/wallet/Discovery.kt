@@ -25,7 +25,7 @@ object Discovery {
     const val RELAY = "https://ntfy.sh"
     const val TOPIC = "cinder-d24ebbd9527ffd25b672"
     const val PUBLIC_KEY = "04f832239da18bcb77fff34722da7e41c4cc0c2d96240a1882336e34fc33d9b90e5e882ab62eb65bcc02e21a96ccf88f9928553f37ebb279f24b8aecfb1aed1b64"
-    private const val CHAIN = "cinder-testnet-2"
+    private const val CHAIN = "cinder-testnet-3"
     private const val MAX_AGE_S = 24 * 3600L
 
     fun text(url: String, t: Long) = "cinder-node|$CHAIN|$url|$t"

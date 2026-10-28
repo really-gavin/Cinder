@@ -1,4 +1,4 @@
-"""Cinder consensus rules (testnet-2).
+"""Cinder consensus rules (testnet-3).
 
 Everything every node must agree on lives here: parameters, hashing, IDs,
 transaction formats, the block reward and difficulty. The state machine
@@ -12,12 +12,12 @@ from ecdsa import SECP256k1, VerifyingKey, BadSignatureError
 from ecdsa.util import sigdecode_string
 
 # ---------------------------------------------------------------- parameters
-CHAIN_ID = "cinder-testnet-2"
+CHAIN_ID = "cinder-testnet-3"
 TICKER = "CDR"
 ASH_PER_CDR = 100_000_000             # smallest unit is one "ash"
 TARGET_BLOCK_TIME = 60                # seconds
 BLOCKS_PER_DAY = 86_400 // TARGET_BLOCK_TIME
-INITIAL_REWARD = 40 * ASH_PER_CDR     # reward at block 1
+INITIAL_REWARD = 1 * ASH_PER_CDR     # reward at block 1
 COOLING_PERIOD = 525_600              # blocks per cooling epoch (~1 year)
 RETARGET_WINDOW = 30
 MEDIAN_WINDOW = 11
@@ -241,7 +241,7 @@ def block_work(target: int) -> int:
 # ---------------------------------------------------------------- reward
 def block_reward(height: int) -> int:
     """The cooling curve: no halving cliffs. Within each ~year the reward
-    slides linearly from `base` to `base/2`. Sums to 31,536,000 CDR."""
+    slides linearly from `base` to `base/2`. Sums to 788,400 CDR."""
     if height <= 0:
         return 0
     epoch, step = divmod(height - 1, COOLING_PERIOD)

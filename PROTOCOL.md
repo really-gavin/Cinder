@@ -1,4 +1,4 @@
-# Cinder protocol (testnet-2)
+# Cinder protocol (testnet-3)
 
 The source of truth is `cinder/consensus.py` (formats and limits) and
 `cinder/state.py` (what each transaction does). This file explains them.
@@ -37,7 +37,7 @@ Every wallet is a card:
 ## Transactions
 Every transaction has `type, from, nonce, fee, work, sig` plus its own fields.
 
-- Message = `cinder-testnet-2|` + the transaction as JSON with sorted keys
+- Message = `cinder-testnet-3|` + the transaction as JSON with sorted keys
   and no spaces, without `sig`. `sig` is a 64-byte compact low-S ECDSA
   (secp256k1) signature over SHA256(message). Receipt number = SHA256d(message).
 - **Free or fee.** With `fee: 0`, the receipt number must start with 18 zero
@@ -85,7 +85,7 @@ Every transaction has `type, from, nonce, fee, work, sig` plus its own fields.
   never pays.
 
 ## Blocks
-- Header: `cinder-testnet-2|height|prev|time|target|miner|tx_root|note|nonce`.
+- Header: `cinder-testnet-3|height|prev|time|target|miner|tx_root|note|nonce`.
   Hash = SHA256d(header); valid when hash <= target.
 - `miner` is a card ID; it gets the block reward plus the block's fees. Its
   registration can be in the same block.
@@ -97,9 +97,9 @@ Every transaction has `type, from, nonce, fee, work, sig` plus its own fields.
 
 ## Difficulty and reward
 - 60-second target, retargeted every block from the last 30 (clamped 4x).
-- Cooling reward: 40 CDR at launch, sliding smoothly to half by the end of
+- Cooling reward: 1 CDR at launch, sliding smoothly to half by the end of
   each ~year (525,600 blocks), then continuing from there. No halving
-  cliffs. Total ever: 31,536,000 CDR.
+  cliffs. Total ever: 788,400 CDR.
 
 ## Fork choice
 Most cumulative work wins. A reorg replays state from genesis along the

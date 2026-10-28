@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <meta name="theme-color" content="#1f1e1b">
-<meta name="build" content="20261027-4">
+<meta name="build" content="20261027-5">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Cinder">
@@ -99,7 +99,7 @@
       <div>
         <h2>It cools, it doesn't halve.</h2>
         <p>Bitcoin cuts its reward in half overnight every four years. Cinder lets it slide instead: within each year the reward eases down a little every block, landing at exactly half by the end. Miners never wake up to a cliff.</p>
-        <p class="muted">The total that will ever exist is fixed at 31,536,000 CDR, one for every second in a year.</p>
+        <p class="muted">The total that will ever exist is fixed at 788,400 CDR.</p>
       </div>
       <figure class="chart" style="margin:0">
         <div id="curve"></div>
@@ -120,8 +120,8 @@
           <tr><th>Proof of work</th><td>Double SHA-256 over the block header</td></tr>
           <tr><th>Block time</th><td>60 seconds, on average</td></tr>
           <tr><th>Difficulty</th><td>Re-aimed every block from the last 30</td></tr>
-          <tr><th>First reward</th><td>40 CDR, cooling to half each year</td></tr>
-          <tr><th>Total supply</th><td>31,536,000 CDR, ever</td></tr>
+          <tr><th>First reward</th><td>1 CDR, cooling to half each year</td></tr>
+          <tr><th>Total supply</th><td>788,400 CDR, ever</td></tr>
           <tr><th>Pre-mine</th><td>None. Block zero paid nobody.</td></tr>
           <tr><th>Smallest unit</th><td>1 ash = 0.00000001 CDR</td></tr>
           <tr><th>Card ID</th><td>16 letters and numbers, last one catches typos</td></tr>
@@ -141,7 +141,7 @@
   <div class="wrap page">
     <div class="page-head">
       <h2>Get on the network.</h2>
-      <p class="lede">You need Python 3.9 or newer. That's it. These five steps take about two minutes.</p>
+      <p class="lede">Make a card, earn your first CDR, or mine from your phone. It takes about two minutes.</p>
     </div>
     <ol class="steps">
       <li><div>
@@ -151,23 +151,7 @@
       </div></li>
       <li><div>
         <h3>Earn your first CDR</h3>
-        <p>Everyone starts at zero. Take a job from the <a href="#jobs">job board</a>, ask someone to pay you, or mine blocks yourself with the steps below.</p>
-      </div></li>
-      <li><div>
-        <h3>Download Cinder to mine</h3>
-        <p>You need Python 3.9 or newer. Unzip the Cinder folder, open a terminal in it and install the one library it needs.</p>
-        <pre>pip install ecdsa</pre>
-      </div></li>
-      <li><div>
-        <h3>Start a node</h3>
-        <p>Your node keeps a full copy of the chain and checks every block against the rules. Point it at someone already on the network.</p>
-        <pre>python node.py --peer <span id="peer-hint">http://SEED-NODE:8642</span></pre>
-        <p class="muted">The node serves this website too, at <code>http://localhost:8642</code>.</p>
-      </div></li>
-      <li><div>
-        <h3>Mine to your card</h3>
-        <p>The miner uses every CPU core. Each block you find pays your card the current reward plus any fees in it.</p>
-        <pre>python miner.py --id "YOUR CARD ID0"</pre>
+        <p>Everyone starts at zero. Take a job from the <a href="#jobs">job board</a>, ask someone to pay you, or mine blocks from an Android phone with the codes below.</p>
       </div></li>
     </ol>
     <section class="phone-mine">

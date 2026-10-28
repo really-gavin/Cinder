@@ -1,6 +1,6 @@
 // Finds the network's node from the address the node phone posts.
 // Only posts signed with the network key count; anything else is ignored.
-const CHAIN_ID = 'cinder-testnet-2';
+const CHAIN_ID = 'cinder-testnet-3';
 const enc = new TextEncoder();
 const unhex = h => new Uint8Array(h.match(/../g).map(x => parseInt(x, 16)));
 
