@@ -54,11 +54,41 @@ class WalletActivity : Activity() {
         wallet = Wallet(this)
         body = column(20).apply { setPadding(dp(20), dp(20), dp(20), dp(36)) }
         setContentView(ScrollView(this).apply { setBackgroundColor(Ui.INK); isFillViewport = true; addView(body); padForSystemBars() })
-        if (wallet.hasCard) home() else welcome()
+        if (wallet.hasCard) { home(); Alerts.schedule(this); askNotifications() } else welcome()
         handleLink(intent)
     }
 
-    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); handleLink(intent) }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent); setIntent(intent); handleLink(intent)
+        intent.getStringExtra("alert")?.let { intent.removeExtra("alert"); offerLock(it) }
+    }
+
+    private fun askNotifications() {
+        if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 5)
+    }
+
+    /** Someone got three SPPs wrong somewhere. Offer to lock the card. */
+    private fun offerLock(msg: String) {
+        if (!wallet.hasCard) return
+        AlertDialog.Builder(this).setTitle("Someone is trying to open your card")
+            .setMessage("$msg\n\nLocking stops the SPP from opening the card anywhere. You can unlock it again here, or move your money.")
+            .setPositiveButton("Lock card") { _, _ -> setLocked(true) }
+            .setNegativeButton("Not now", null).show()
+    }
+
+    private fun setLocked(locked: Boolean) {
+        Ui.confirm(this, wallet, if (locked) "Lock this card?" else "Unlock this card?", "Confirm it's you") {
+            Toast.makeText(this, "Working on it…", Toast.LENGTH_SHORT).show()
+            thread {
+                val err = try { wallet.setLocked(locked); null } catch (e: Exception) { e.message }
+                ui.post {
+                    Toast.makeText(this, err ?: if (locked) "Card locked. It takes effect within a minute." else "Card unlocked.", Toast.LENGTH_LONG).show()
+                    if (onHome) home()
+                }
+            }
+        }
+    }
 
     /** cinderpay://import?words=… : a card sent from the website. */
     private fun handleLink(i: Intent?) {
@@ -235,13 +265,19 @@ class WalletActivity : Activity() {
         body.addView(button("Use on the website") { toWebsite() })
         body.addView(button("Network") { network() })
         body.addView(button("Remove card from this phone") { removeCard() })
+        lockBox = column().also { body.addView(it) }
+        body.addView(button("Lock card") { setLocked(true) })
         refresh()
+        intent?.getStringExtra("alert")?.let { intent.removeExtra("alert"); offerLock(it) }
     }
+
+    private var lockBox: LinearLayout? = null
 
     private fun refresh() {
         thread {
             val me = try { wallet.me() } catch (e: Exception) { ui.post { stateView?.text = e.message }; null }
             if (me != null) ui.post { paint(me) }
+            try { wallet.fetchAlerts().lastOrNull()?.let { m -> ui.post { offerLock(m) } } } catch (_: Exception) { }
             ui.postDelayed({ if (onHome) refresh() }, 8000)
         }
     }
@@ -251,6 +287,14 @@ class WalletActivity : Activity() {
         val bits = mutableListOf<String>()
         if (!me.optBoolean("registered")) bits += if (me.optBoolean("registering")) "Your card is joining the network. It works after the next block."
             else "Your card isn't on the network yet. Open Network to retry."
+        lockBox?.let { box ->
+            box.removeAllViews()
+            if (me.optBoolean("locked")) {
+                box.addView(text("This card is locked. Nobody can open it with the SPP. You can unlock it, or move your money to another card.", Ui.BAD, 15f).apply { setPadding(0, dp(8), 0, dp(4)) })
+                box.addView(button("Unlock card", primary = true) { setLocked(false) })
+                box.addView(button("Move my money") { send() })
+            }
+        }
         val diff = me.optLong("balance") - me.optLong("available")
         if (diff > 0) bits += "${Core.fmt(diff)} CDR on its way out."
         stateView?.text = bits.joinToString(" ")

@@ -148,6 +148,13 @@ function sppWrong() {
   if (fails >= TRIES) { store.set('lock', { fails: 0, until: Date.now() + COOLDOWN }); return lockLeft(); }
   store.set('lock', { fails, until: 0 }); return 0;
 }
+async function sendAlert(what) {
+  const topic = card.saved?.alert; if (!topic) return;
+  try {
+    await fetch('https://ntfy.sh/' + topic, { method: 'POST', body: `${what} Open Cinder Wallet to lock the card.`,
+      headers: { Title: 'Someone is trying to open your Cinder card', Priority: '4', Tags: 'warning' } });
+  } catch {}
+}
 const triesLeft = () => TRIES - ((store.get('lock') || {}).fails || 0);
 // Checks an SPP against the saved card. Resolves { keys, entropy } or { html } with what to show.
 async function checkSpp(spp) {
@@ -155,9 +162,11 @@ async function checkSpp(spp) {
   try {
     const entropy = await X.unlockEntropy(card.saved.box, spp);
     store.del('lock');
+    if (!card.saved.alert) { card.saved.alert = await X.alertTopic(entropy); store.set('card', card.saved); }
     return { entropy, keys: X.keysFromEntropy(entropy) };
   } catch {
     const wait = sppWrong();
+    if (wait) sendAlert('Three wrong SPPs were typed on the Cinder website.');
     return { html: wait ? lockMsg(wait) : `<div class="msg bad">That SPP doesn't match this card. ${triesLeft()} ${triesLeft() === 1 ? 'try' : 'tries'} left.</div>` };
   }
 }
@@ -223,6 +232,7 @@ function renderWallet() {
   if (card.importing || card.importError) return importScreen(root);
   if (!hasWallet() || card.recover) return setupStart(root);
   if (card.saved.pin || card.saved.box.v !== 2) return legacyScreen(root);
+  if (!card.unlocked && card.locked) return lockedScreen(root);
   if (!card.unlocked) return sppScreen(root);
   walletMain(root);
 }
@@ -281,7 +291,7 @@ function setupReveal(root, entropy, isNew) {
   $('#finish').onclick = async () => {
     const btn = $('#finish'), msg = $('#reg-msg');
     btn.disabled = true;
-    card.saved = { id: keys.id, pub: keys.pub, box: await X.lockEntropy(entropy, spp) };
+    card.saved = { id: keys.id, pub: keys.pub, box: await X.lockEntropy(entropy, spp), alert: await X.alertTopic(entropy) };
     store.set('card', card.saved);
     Object.assign(card, { unlocked: true, spp, recover: false });
     store.del('lock');
@@ -299,6 +309,65 @@ function setupReveal(root, entropy, isNew) {
   };
 }
 
+// Has the owner locked this card (from their phone, say)? Then the SPP can't open it anywhere.
+async function checkLocked() {
+  if (!card.saved || !status) return card.locked;
+  try {
+    const me = await api('/api/id/' + card.saved.id);
+    const now = !!me.locked;
+    if (now !== !!card.locked) { card.locked = now; renderWallet(); }
+  } catch {}
+  return card.locked;
+}
+
+function lockedScreen(root) {
+  root.innerHTML = `<div class="page-head"><h2>This card is locked.</h2>
+    <p class="lede">${formatId(card.saved.id)} was locked, so its SPP can’t open it on any device. Open Cinder Wallet on the phone that has this card to unlock it. Or use your 12 words here to either unlock it or move your money to another card.</p></div>
+    <div class="cols">${cardFront(card.saved.id, 'Locked')}
+      <form class="panel heavy" id="lk-words"><h3>Use my 12 words</h3>
+        <label class="f" for="lk-w">Your 12 backup words<textarea id="lk-w" rows="3" required spellcheck="false" autocapitalize="none" style="font:16px var(--mono);padding:12px;border:1.5px solid var(--mortar);background:var(--concrete);color:var(--ink)"></textarea></label>
+        <div id="lk-msg"></div>
+        <div class="row"><button class="btn hi" type="submit">Continue</button><button class="btn ghost sm" type="button" id="forget">Remove from this device</button></div>
+      </form></div>`;
+  $('#forget').onclick = () => confirmForget($('#lk-msg'));
+  $('#lk-words').onsubmit = e => {
+    e.preventDefault();
+    let ent;
+    try { ent = X.entropyFromPhrase($('#lk-w').value); } catch (err) { return void ($('#lk-msg').innerHTML = `<div class="msg bad">${esc(err.message)}</div>`); }
+    const keys = X.keysFromEntropy(ent);
+    if (keys.id !== card.saved.id) return void ($('#lk-msg').innerHTML = `<div class="msg bad">Those words belong to a different card.</div>`);
+    const form = $('#lk-words');
+    form.innerHTML = `<h3>Your words are right.</h3><p class="muted">Pick one. Unlocking puts the card back to normal. Moving sends everything to another card and leaves this one locked.</p>
+      <div class="row"><button class="btn hi" type="button" id="lk-unlock">Unlock this card</button></div>
+      <label class="f" for="lk-to">Move all my money to<input id="lk-to" placeholder="XXXX XXXX XXXX XXXX" spellcheck="false" autocapitalize="characters" class="mono"></label>
+      <div class="row"><button class="btn" type="button" id="lk-move">Move my money</button></div>
+      <div id="lk-msg2"></div>`;
+    const progress = p => { $('#lk-msg2').innerHTML = `<div class="progress"><i style="width:${Math.round(p * 100)}%"></i></div>`; };
+    $('#lk-unlock').onclick = async () => {
+      try {
+        progress(0.02);
+        await submit(keys, { type: 'unlock' }, progress);
+        const spp = X.sppFromEntropy(ent);
+        card.saved = { id: keys.id, pub: keys.pub, box: await X.lockEntropy(ent, spp), alert: await X.alertTopic(ent) };
+        store.set('card', card.saved);
+        Object.assign(card, { locked: false, unlocked: true, spp });
+        renderWallet();
+      } catch (err) { $('#lk-msg2').innerHTML = `<div class="msg bad">${esc(err.message)}</div>`; }
+    };
+    $('#lk-move').onclick = async () => {
+      const to = normalizeId($('#lk-to').value);
+      if (!isValidId(to) || to === keys.id) return void ($('#lk-msg2').innerHTML = `<div class="msg bad">Type the card ID to send everything to.</div>`);
+      try {
+        const me = await api('/api/id/' + keys.id);
+        if (!me.available) throw new Error('There’s no money on this card to move.');
+        progress(0.02);
+        await submit(keys, { type: 'pay', to, amount: me.available, memo: 'Moved from a locked card' }, progress);
+        $('#lk-msg2').innerHTML = `<div class="msg">Sent ${fmtCndr(me.available)} CDR to ${formatId(to)}. It arrives with the next block. This card stays locked.</div>`;
+      } catch (err) { $('#lk-msg2').innerHTML = `<div class="msg bad">${esc(err.message)}</div>`; }
+    };
+  };
+}
+
 function sppScreen(root) {
   root.innerHTML = `<div class="page-head"><h2>Unlock your card.</h2>
     ${card.intent ? `<p class="lede">Unlock to pay ${fmtCndr(card.intent.amount)} CDR to the shop.</p>` : ''}</div>
@@ -311,9 +380,11 @@ function sppScreen(root) {
         <p class="muted" style="font-size:14px">Forgot your SPP? <button type="button" class="linkbtn" id="forgot-spp">Get back in with your 12 words</button>. Your card and balance stay as they are.</p>
       </div></form>`;
   $('#uspp').focus();
+  checkLocked();
   $('#unlock').onsubmit = async e => {
     e.preventDefault();
     const btn = e.submitter; btn.disabled = true;
+    if (await checkLocked()) return;
     const chk = await checkSpp($('#uspp').value);
     btn.disabled = false;
     if (!chk.keys) { $('#umsg').innerHTML = chk.html; $('#uspp').value = ''; return; }
@@ -354,10 +425,11 @@ function legacyScreen(root) {
       }
       if (!spp) {
         const wait = sppWrong();
+        if (wait) sendAlert('Three wrong PINs were typed on the Cinder website.');
         return void ($('#lmsg').innerHTML = wait ? lockMsg(wait) : `<div class="msg bad">That isn’t the PIN for this card. ${triesLeft()} ${triesLeft() === 1 ? 'try' : 'tries'} left.</div>`);
       }
       const entropy = await X.unlockEntropyLegacy(card.saved.box, pin, spp);
-      card.saved = { id: card.saved.id, pub: card.saved.pub, box: await X.lockEntropy(entropy, X.sppFromEntropy(entropy)) };
+      card.saved = { id: card.saved.id, pub: card.saved.pub, box: await X.lockEntropy(entropy, X.sppFromEntropy(entropy)), alert: await X.alertTopic(entropy) };
       store.set('card', card.saved); store.del('lock');
       Object.assign(card, { unlocked: true, spp: X.sppFromEntropy(entropy) });
       await loadMe(); renderWallet();
@@ -457,7 +529,8 @@ function walletMain(root) {
       <button class="btn ghost sm" type="button" id="w-words">Show backup words</button>
       <button class="btn ghost sm" type="button" id="w-xfer">Use on another device</button>
       <button class="btn ghost sm" type="button" id="w-net">Network</button>
-      <button class="btn ghost sm" type="button" id="w-lock">Lock</button>
+      <button class="btn ghost sm" type="button" id="w-lock">Close card</button>
+      <button class="btn ghost sm" type="button" id="w-freeze">Lock card</button>
       <button class="btn ghost sm" type="button" id="w-rm">Remove from this device</button>
     </div>
     <div id="w-foot"></div>`;
@@ -483,6 +556,16 @@ function walletMain(root) {
   $('#w-cardslot').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flipCard(); } };
   $('#w-lock').onclick = () => { Object.assign(card, { unlocked: false, spp: null }); renderWallet(); };
   $('#w-rm').onclick = () => confirmForget($('#w-foot'));
+  $('#w-freeze').onclick = async () => {
+    $('#w-foot').innerHTML = `<div class="msg warn" style="display:grid;gap:10px">Locking stops the SPP from opening this card on any device, here or on your phone. Only the 12 words or the Cinder Wallet app can unlock it again or move your money.
+      <div class="row"><button class="btn sm" type="button" id="fr-yes">Lock this card</button><button class="btn ghost sm" type="button" id="fr-no">Never mind</button></div></div>`;
+    $('#fr-no').onclick = () => { $('#w-foot').innerHTML = ''; };
+    $('#fr-yes').onclick = async () => {
+      $('#w-foot').innerHTML = '';
+      const id = await act('Locking this card. Nobody can open it with the SPP until it is unlocked.', { type: 'lock' });
+      if (id) { Object.assign(card, { locked: true, unlocked: false, spp: null }); renderWallet(); }
+    };
+  };
   $('#w-xfer').onclick = () => transferPanel($('#w-foot'));
   $('#w-net').onclick = () => { $('#nodeurl').value = API || ''; $('#nodedlg').showModal(); };
   $('#t-words').onclick = () => $('#w-words').click();
@@ -1179,7 +1262,10 @@ async function tick() {
   paintStatus();
   if (!status || status.tip === before) return;
   if (current === 'home') { paintWall(); paintCurve(); }
-  if (card.unlocked) await loadMe();
+  if (card.unlocked) {
+    await loadMe();
+    if (card.me?.locked) { Object.assign(card, { locked: true, unlocked: false, spp: null }); if (current === 'wallet') renderWallet(); return; }
+  } else if (card.locked && current === 'wallet') await checkLocked();
   if (current === 'wallet' && card.unlocked) refreshWallet();
   if (current === 'jobs' && jobsTab !== 'post') fillJobs();
   if (current === 'loans' && loansTab !== 'ask') fillLoans();

@@ -186,6 +186,7 @@ class Node:
             return {
                 "id": id_, "display": C.format_id(id_),
                 "registered": acct is not None,
+                "locked": bool((pend or acct or {}).get("locked")),
                 "registering": acct is None and pend is not None,
                 "pub": (acct or pend or {}).get("pub"),
                 "balance": acct["bal"] if acct else 0,

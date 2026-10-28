@@ -240,4 +240,10 @@ export async function findSppLegacy(box, pin, onProgress) {
   }
   return null;
 }
+// A private message board for this card. Anyone holding the card's secret can work it out; nobody else can.
+// A device that sees three wrong SPPs posts here, and the phone with the card picks it up.
+export async function alertTopic(entropy) {
+  const d = await crypto.subtle.digest('SHA-256', enc.encode('cinder-alert|' + hex(entropy)));
+  return 'cinder-alert-' + hex(new Uint8Array(d)).slice(0, 24);
+}
 export const normalizeSpp = s => String(s).toUpperCase().replace(/\s/g, '').replace(/O/g, '0').replace(/[IL]/g, '1');

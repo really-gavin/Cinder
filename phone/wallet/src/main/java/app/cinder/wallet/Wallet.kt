@@ -40,6 +40,7 @@ class Wallet(context: Context) {
             .putString("entropy", seal(entropy))
             .putString("spp", seal(spp.toByteArray()))
             .putString("id", keys.id)
+            .putLong("alert_since", System.currentTimeMillis() / 1000)
             .apply()
         return spp
     }
@@ -108,6 +109,38 @@ class Wallet(context: Context) {
             me.getLong("next_nonce"), progress)
         val res = call { Net.postJson("$it/api/tx", JSONObject(tx)) }
         return res.optString("txid")
+    }
+
+    // ------------------------------------------------------------- lock the card on the network, and warnings
+    /** Freezes the card (lock) or opens it again (unlock). A locked card can only be unlocked or have its money moved out. */
+    fun setLocked(locked: Boolean, progress: (Double) -> Unit = {}) {
+        val me = me()
+        val tx = Core.buildTx(keys(), mapOf("type" to if (locked) "lock" else "unlock"), me.getLong("next_nonce"), progress)
+        call { Net.postJson("$it/api/tx", JSONObject(tx)) }
+    }
+
+    /** This card's private warning board. Only someone with the card's secret can work out the name. */
+    fun alertTopic(): String {
+        val ent = open(p.getString("entropy", null)!!)
+        return "cinder-alert-" + Core.hex(Core.sha256(("cinder-alert|" + Core.hex(ent)).toByteArray())).take(24)
+    }
+
+    /** Warnings posted since the last check, oldest first. */
+    fun fetchAlerts(): List<String> {
+        val since = p.getLong("alert_since", System.currentTimeMillis() / 1000)
+        val body = Net.getText("https://ntfy.sh/${alertTopic()}/json?poll=1&since=$since", 10_000)
+        var latest = since - 1
+        val out = mutableListOf<String>()
+        for (line in body.lineSequence()) {
+            try {
+                val ev = JSONObject(line)
+                if (ev.optString("event") != "message") continue
+                latest = maxOf(latest, ev.optLong("time"))
+                out += ev.optString("message")
+            } catch (_: Exception) { }
+        }
+        p.edit().putLong("alert_since", maxOf(since, latest + 1)).apply()
+        return out
     }
 
     // ------------------------------------------------------------- locking

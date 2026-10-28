@@ -103,6 +103,8 @@ COMMON = ("type", "from", "nonce", "fee", "work", "sig")
 TX_TYPES = {
     "register":     {"pub": "pub"},
     "pay":          {"to": "id", "amount": "amount", "memo": "text80"},
+    "lock":         {},
+    "unlock":       {},
     "job_post":     {"title": "text120", "pay": "amount", "open_blocks": "window", "work_blocks": "window"},
     "job_cancel":   {"job": "hash"},
     "job_take":     {"job": "hash"},

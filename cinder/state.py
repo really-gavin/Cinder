@@ -97,6 +97,8 @@ class State:
         except ValueError as e:
             raise Invalid(str(e))
         need(tx["nonce"] == a["nonce"], f"nonce must be {a['nonce']}")
+        # A locked card can only move its money out (pay) or be unlocked.
+        need(not a.get("locked") or t in ("pay", "unlock"), "this card is locked. Unlock it, or move the money to another card")
         getattr(self, "_" + t)(tx, tid, height, a)   # checks, then changes
         a["nonce"] += 1
         if tx["fee"]:
@@ -107,6 +109,19 @@ class State:
 
     def _pay_fee(self, a, tx):
         a["bal"] -= tx["fee"]
+
+    # lock: the owner freezes the card, e.g. after someone kept guessing its SPP
+    def _lock(self, tx, tid, h, a):
+        need(not a.get("locked"), "this card is already locked")
+        self._fee_ok(a, tx)
+        self._pay_fee(a, tx)
+        a["locked"] = True
+
+    def _unlock(self, tx, tid, h, a):
+        need(a.get("locked"), "this card isn't locked")
+        self._fee_ok(a, tx)
+        self._pay_fee(a, tx)
+        a["locked"] = False
 
     # pay
     def _pay(self, tx, tid, h, a):

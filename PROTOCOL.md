@@ -29,6 +29,11 @@ Every wallet is a card:
 - On a device, the backup bytes are encrypted with AES-GCM under a key
   derived (PBKDF2-SHA256, 600,000 rounds) from the SPP. Forgot the SPP?
   Restore from the words and the same SPP comes back.
+- **Lock.** The owner can freeze a card with a `lock` transaction. A locked card
+  accepts only `unlock` and `pay` (so the money can be moved out); clients refuse
+  to open it with its SPP. After three wrong SPPs a device waits five minutes and
+  posts a warning to a private board named from the card's secret, which the
+  Cinder Wallet app reads.
 - A card must be **registered** on the network once before it can receive.
   Registration is free; the device does a few seconds of work.
 
