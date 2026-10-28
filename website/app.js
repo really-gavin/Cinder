@@ -2,7 +2,7 @@
 import * as X from './cindercrypto.js';
 import qrcode from './vendor/qrcode.js';
 import { NODES, DISCOVERY } from './config.js';
-import { discoverNode } from './discover.js';
+import { discoverNodes } from './discover.js';
 
 const { fmtCndr, parseCndr, formatId, normalizeId, isValidId } = X;
 const INITIAL_REWARD = 1, COOLING = 525_600, DAY = 1440, REVIEW = DAY, MAX_REJECTS = 2;
@@ -45,35 +45,50 @@ const days = v => { const d = Number(v); return Number.isFinite(d) && d > 0 ? Ma
 
 // ------------------------------------------------------------------ node API
 let API = null, status = null;
-async function api(path, opts = {}) {
-  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 10000);
+async function api(path, opts = {}, base = API, ms = 10000) {
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
   try {
-    const r = await fetch(API + path, { ...opts, signal: ctl.signal,
+    const r = await fetch(base + path, { ...opts, signal: ctl.signal,
       headers: opts.body ? { 'Content-Type': 'application/json' } : undefined });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || `node said ${r.status}`);
     return j;
   } finally { clearTimeout(t); }
 }
-let lastFind = Date.now();
-async function findNode() {
-  const saved = store.get('node');
-  const found = NODES.length ? null : await discoverNode(DISCOVERY);
-  const tries = [saved, ...NODES, found, location.protocol.startsWith('http') ? location.origin : null, 'http://localhost:8642'].filter(Boolean);
-  for (const base of [...new Set(tries)]) {
-    API = base.replace(/\/$/, '');
-    try { status = await api('/api/status'); return true; } catch {}
-  }
-  API = (saved || 'http://localhost:8642').replace(/\/$/, '');
-  status = null;
-  return false;
+let lastFind = 0, finding = null;
+// Looks for a working node: the one you chose, the addresses node phones have announced
+// (newest first), this site's own address, and localhost. All are asked at once and the
+// first that answers on this chain wins, so a dead address never holds things up.
+function findNode() {
+  return finding ||= (async () => {
+    lastFind = Date.now();
+    const saved = store.get('node');
+    const announced = NODES.length ? [] : await discoverNodes(DISCOVERY);
+    const tries = [saved, ...NODES, ...announced.slice(0, 6), location.protocol.startsWith('http') ? location.origin : null, 'http://localhost:8642']
+      .filter(Boolean).map(b => b.replace(/\/$/, ''));
+    const list = [...new Set(tries)];
+    const probe = async base => {
+      const s = await api('/api/status', {}, base, 6000);
+      if (!s || (s.chain_id && s.chain_id !== X.CHAIN_ID)) throw new Error('other chain');
+      return [base, s];
+    };
+    // Earlier entries win when several answer, but nobody waits for the slow ones.
+    const results = list.map(b => probe(b).then(r => r, () => null));
+    for (const p of results) {
+      const r = await p;
+      if (r) { API = r[0]; status = r[1]; return true; }
+    }
+    API = (saved || list[0] || 'http://localhost:8642').replace(/\/$/, '');
+    status = null;
+    return false;
+  })().finally(() => { finding = null; });
 }
 
 // ------------------------------------------------------------------ home
 let lastTip = null;
 function paintStatus() {
   $('#netpill').dataset.on = status ? '1' : '0';
-  $('#netlabel').textContent = status ? `Block ${status.height.toLocaleString()}` : 'No node';
+  $('#netlabel').textContent = status ? `Block ${status.height.toLocaleString()}` : (finding ? 'Looking…' : 'No node');
   $('#foot-node').textContent = status ? `Reading from ${API}` : `Can't reach a node at ${API}`;
     if (!status) return;
   $('#s-height').textContent = status.height.toLocaleString();
@@ -1146,7 +1161,7 @@ async function tick() {
   try { status = await api('/api/status'); } catch {
     status = null;
     // The node phone's address can change; look it up again now and then.
-    if (Date.now() - lastFind > 30_000) { lastFind = Date.now(); await findNode(); }
+    if (Date.now() - lastFind > 8_000) await findNode();
   }
   paintStatus();
   if (!status || status.tip === before) return;
@@ -1186,6 +1201,7 @@ $('#nodeform').onsubmit = async e => {
 
 window.addEventListener('hashchange', route);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+window.addEventListener('online', () => { lastFind = 0; tick(); });
 await findNode();
 paintStatus();
 route();

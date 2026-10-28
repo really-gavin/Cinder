@@ -26,8 +26,10 @@ export async function verifyPost(m, keyHex) {
   } catch { return false; }
 }
 
-export async function newestValid(ndjson, keyHex, now = Date.now() / 1000) {
-  let best = null;
+// Every correctly signed address from the last day, newest first. Nodes come and go,
+// so callers try them in order until one answers.
+export async function allValid(ndjson, keyHex, now = Date.now() / 1000) {
+  const seen = new Map();
   for (const line of ndjson.split('\n')) {
     try {
       const ev = JSON.parse(line);
@@ -36,17 +38,24 @@ export async function newestValid(ndjson, keyHex, now = Date.now() / 1000) {
       if (typeof m.url !== 'string' || !m.url.startsWith('https://') || typeof m.t !== 'number') continue;
       if (m.t > now + 600 || m.t < now - 86400) continue;
       if (!(await verifyPost(m, keyHex))) continue;
-      if (!best || m.t > best.t) best = m;
+      const url = m.url.replace(/\/$/, '');
+      if (!seen.has(url) || seen.get(url) < m.t) seen.set(url, m.t);
     } catch {}
   }
-  return best ? best.url.replace(/\/$/, '') : null;
+  return [...seen].sort((a, b) => b[1] - a[1]).map(([url]) => url);
 }
 
-export async function discoverNode(cfg) {
-  if (!cfg?.topic || !crypto.subtle) return null;
+export async function newestValid(ndjson, keyHex, now) {
+  return (await allValid(ndjson, keyHex, now))[0] || null;
+}
+
+export async function discoverNodes(cfg) {
+  if (!cfg?.topic || !crypto.subtle) return [];
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
   try {
-    const r = await fetch(`${cfg.relay}/${cfg.topic}/json?poll=1&since=24h`, { signal: ctl.signal });
-    return r.ok ? await newestValid(await r.text(), cfg.key) : null;
-  } catch { return null; } finally { clearTimeout(t); }
+    const r = await fetch(`${cfg.relay}/${cfg.topic}/json?poll=1&since=24h`, { signal: ctl.signal, cache: 'no-store' });
+    return r.ok ? await allValid(await r.text(), cfg.key) : [];
+  } catch { return []; } finally { clearTimeout(t); }
 }
+
+export async function discoverNode(cfg) { return (await discoverNodes(cfg))[0] || null; }

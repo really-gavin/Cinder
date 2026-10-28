@@ -57,25 +57,42 @@ object Discovery {
         Net.postJson("$relay/$TOPIC", msg)
     }
 
-    /** The newest correctly signed node address from the last day, if any. */
-    fun find(relay: String = RELAY): String? {
+    /** Every correctly signed node address from the last day, newest first. */
+    fun findAll(relay: String = RELAY): List<String> {
         val body = Net.getText("$relay/$TOPIC/json?poll=1&since=24h", 8000)
-        return newestValid(body, System.currentTimeMillis() / 1000)
+        return allValid(body, System.currentTimeMillis() / 1000)
     }
 
-    fun newestValid(ndjson: String, now: Long): String? {
-        var best: Pair<Long, String>? = null
+    /** The newest correctly signed node address from the last day, if any. */
+    fun find(relay: String = RELAY): String? = findAll(relay).firstOrNull()
+
+    /** The first announced node that actually answers on this chain, trying newest first. */
+    fun findReachable(relay: String = RELAY): String? {
+        for (url in findAll(relay).take(6)) {
+            val ok = runCatching {
+                val s = Net.getJson("$url/api/status", 5000)
+                s.optString("chain_id", CHAIN) == CHAIN
+            }.getOrDefault(false)
+            if (ok) return url
+        }
+        return null
+    }
+
+    fun newestValid(ndjson: String, now: Long): String? = allValid(ndjson, now).firstOrNull()
+
+    fun allValid(ndjson: String, now: Long): List<String> {
+        val seen = LinkedHashMap<String, Long>()
         for (line in ndjson.lineSequence()) {
             try {
                 val ev = JSONObject(line)
                 if (ev.optString("event") != "message") continue
                 val m = JSONObject(ev.getString("message"))
-                val url = m.getString("url"); val t = m.getLong("t")
+                val url = m.getString("url").trimEnd('/'); val t = m.getLong("t")
                 if (!url.startsWith("https://") || t > now + 600 || t < now - MAX_AGE_S) continue
-                if (!verify(url, t, m.getString("sig"))) continue
-                if (best == null || t > best.first) best = t to url.trimEnd('/')
+                if (!verify(m.getString("url"), t, m.getString("sig"))) continue
+                if ((seen[url] ?: 0L) < t) seen[url] = t
             } catch (_: Exception) { }
         }
-        return best?.second
+        return seen.entries.sortedByDescending { it.value }.map { it.key }
     }
 }

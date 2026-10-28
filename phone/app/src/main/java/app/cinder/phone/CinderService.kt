@@ -101,8 +101,8 @@ class CinderService : Service() {
      */
     private fun minerNode(): String? {
         prefs.node.takeIf { it.isNotBlank() }?.let { return it }
-        siteNode?.let { (url, at) -> if (System.currentTimeMillis() - at < 5 * 60_000) return url }
-        val url = runCatching { Discovery.find() }.getOrNull()
+        siteNode?.let { (url, at) -> if (System.currentTimeMillis() - at < 60_000) return url }
+        val url = runCatching { Discovery.findReachable() }.getOrNull()
             ?: runCatching { Net.nodeFromSite(prefs.site) }.getOrNull()
             ?: runCatching { Net.nodeFromSite(prefs.site.trimEnd('/') + "/website") }.getOrNull()
             ?: return null

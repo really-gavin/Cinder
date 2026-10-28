@@ -63,8 +63,8 @@ class Wallet(context: Context) {
     /** A node to talk to: one you set, else the one the node phone announced, else the website's list. */
     fun nodeUrl(): String {
         node.takeIf { it.isNotBlank() }?.let { return it }
-        cached?.let { (u, at) -> if (System.currentTimeMillis() - at < 5 * 60_000) return u }
-        val u = runCatching { Discovery.find() }.getOrNull()
+        cached?.let { (u, at) -> if (System.currentTimeMillis() - at < 60_000) return u }
+        val u = runCatching { Discovery.findReachable() }.getOrNull()
             ?: runCatching { Net.nodeFromSite(SITE) }.getOrNull()
             ?: runCatching { Net.nodeFromSite(SITE + "website") }.getOrNull()
             ?: throw Net.NodeError("Can't find the Cinder network right now. Check your internet connection.")
