@@ -16,8 +16,7 @@ Every wallet is a card:
 | Part | What it is | Who chooses |
 |---|---|---|
 | **Card ID** | 16 characters in fours, e.g. `K5V9 9MG8 G9BF GTC7`. Public: people pay you with it. | Made from your key |
-| **PIN** | 6 digits. Unlocks the card on your device. | You |
-| **SPP** (Secure Payment Pin) | 3 digits. Asked for on every payment, like a CVV. | Worked out from your secret, so the 12 words bring it back |
+| **SPP** (Secure Payment Pin) | 3 digits. Opens the card on your device and is asked for on every payment, like a CVV. After 3 wrong tries the device waits 5 minutes. | Worked out from your secret, so the 12 words bring it back |
 | **Backup words** | 12 words. Bring the card back on any device. | Generated |
 
 - The ID alphabet is Crockford base32 (no I, L, O, U). The 16th character
@@ -28,9 +27,8 @@ Every wallet is a card:
 - Backup words: 16 random bytes as 12 BIP-39 English words (standard
   checksum). Private key = SHA256("cinder-key|" + those bytes).
 - On a device, the backup bytes are encrypted with AES-GCM under a key
-  derived (PBKDF2-SHA256, 210,000 rounds) from PIN + SPP together. The PIN
-  alone only opens the view. Forgot the PIN or SPP? Restore from the words:
-  you choose a new PIN and the same SPP comes back.
+  derived (PBKDF2-SHA256, 600,000 rounds) from the SPP. Forgot the SPP?
+  Restore from the words and the same SPP comes back.
 - A card must be **registered** on the network once before it can receive.
   Registration is free; the device does a few seconds of work.
 

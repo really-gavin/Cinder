@@ -202,46 +202,40 @@ export function parseCndr(s) {
 }
 
 // ------------------------------------------------------------------ the wallet's lock
-// The backup words are stored encrypted with PIN + SPP together. The PIN on
-// its own only opens the view (balance, history); paying needs the SPP too.
-async function deriveKey(secret, salt, usage) {
+// The backup words are stored on this device encrypted with the 3-digit SPP. The key
+// derivation is deliberately slow, so every guess costs real time.
+async function deriveKey(secret, salt, usage, iterations = 210_000) {
   const base = await crypto.subtle.importKey('raw', enc.encode(secret), 'PBKDF2', false, ['deriveKey', 'deriveBits']);
-  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 210_000, hash: 'SHA-256' },
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
     base, { name: 'AES-GCM', length: 256 }, false, usage);
 }
-export async function pinHash(pin, saltHex) {
-  const salt = saltHex ? unhex(saltHex) : crypto.getRandomValues(new Uint8Array(16));
-  const base = await crypto.subtle.importKey('raw', enc.encode('pin|' + pin), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 120_000, hash: 'SHA-256' }, base, 256);
-  return { salt: hex(salt), hash: hex(new Uint8Array(bits)) };
-}
-export async function lockEntropy(entropy, pin, spp) {
+const SPP_ROUNDS = 600_000;
+export async function lockEntropy(entropy, spp) {
   const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveKey(`${pin}|${normalizeSpp(spp)}`, salt, ['encrypt']);
+  const key = await deriveKey(`spp2|${normalizeSpp(spp)}`, salt, ['encrypt'], SPP_ROUNDS);
   const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, entropy);
-  return { salt: hex(salt), iv: hex(iv), ct: hex(new Uint8Array(ct)) };
+  return { v: 2, salt: hex(salt), iv: hex(iv), ct: hex(new Uint8Array(ct)) };
 }
-export async function unlockEntropy(box, pin, spp) {
+export async function unlockEntropy(box, spp) {
+  if (box.v !== 2) throw new Error('old card format');
+  const key = await deriveKey(`spp2|${normalizeSpp(spp)}`, unhex(box.salt), ['decrypt'], SPP_ROUNDS);
+  return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unhex(box.iv) }, key, unhex(box.ct)));
+}
+
+// ---- cards saved before the PIN was dropped: PIN + SPP locked the words, the PIN alone locked the SPP.
+export async function unlockEntropyLegacy(box, pin, spp) {
   const key = await deriveKey(`${pin}|${normalizeSpp(spp)}`, unhex(box.salt), ['decrypt']);
   return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unhex(box.iv) }, key, unhex(box.ct)));
 }
-// The SPP is also kept under the PIN alone, so a forgotten SPP can be shown again after the PIN.
-// (The SPP is a second check before money moves, not a second secret.)
-export async function lockSpp(spp, pin) {
-  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveKey(`spp|${pin}`, salt, ['encrypt']);
-  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(spp));
-  return { salt: hex(salt), iv: hex(iv), ct: hex(new Uint8Array(ct)) };
-}
-export async function unlockSpp(sppBox, pin) {
+export async function unlockSppLegacy(sppBox, pin) {
   const key = await deriveKey(`spp|${pin}`, unhex(sppBox.salt), ['decrypt']);
   return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unhex(sppBox.iv) }, key, unhex(sppBox.ct)));
 }
-// Cards saved before that: with the PIN known, try every 3-digit SPP (about a minute worst case).
-export async function findSpp(box, pin, onProgress) {
+// Oldest cards kept no SPP box: with the PIN known, try every 3-digit SPP.
+export async function findSppLegacy(box, pin, onProgress) {
   for (let i = 0; i < 1000; i++) {
     const spp = String(i).padStart(3, '0');
-    try { await unlockEntropy(box, pin, spp); return spp; } catch {}
+    try { await unlockEntropyLegacy(box, pin, spp); return spp; } catch {}
     if (onProgress && i % 10 === 0) onProgress(i / 1000);
   }
   return null;

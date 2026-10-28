@@ -136,8 +136,31 @@ function paintCurve() {
 }
 
 // ------------------------------------------------------------------ the card (wallet state)
-// stored: { id, pub, pin: {salt, hash}, box: {salt, iv, ct} }
-const card = { saved: store.get('card'), unlocked: false, pin: null, me: null, draft: null };
+// stored: { id, pub, box: {v:2, salt, iv, ct} }   (older cards also carry pin + sppBox until they are updated)
+const card = { saved: store.get('card'), unlocked: false, spp: null, me: null, draft: null };
+
+// Three wrong SPPs in a row and this device waits five minutes. It counts every place an SPP is typed.
+const TRIES = 3, COOLDOWN = 5 * 60_000;
+function lockLeft() { const l = store.get('lock'); return l && l.until > Date.now() ? Math.ceil((l.until - Date.now()) / 1000) : 0; }
+const lockMsg = s => `<div class="msg bad">Too many wrong tries. Try again in ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}.</div>`;
+function sppWrong() {
+  const l = store.get('lock') || {}; const fails = (l.until > Date.now() ? 0 : l.fails || 0) + 1;
+  if (fails >= TRIES) { store.set('lock', { fails: 0, until: Date.now() + COOLDOWN }); return lockLeft(); }
+  store.set('lock', { fails, until: 0 }); return 0;
+}
+const triesLeft = () => TRIES - ((store.get('lock') || {}).fails || 0);
+// Checks an SPP against the saved card. Resolves { keys, entropy } or { html } with what to show.
+async function checkSpp(spp) {
+  const left = lockLeft(); if (left) return { html: lockMsg(left) };
+  try {
+    const entropy = await X.unlockEntropy(card.saved.box, spp);
+    store.del('lock');
+    return { entropy, keys: X.keysFromEntropy(entropy) };
+  } catch {
+    const wait = sppWrong();
+    return { html: wait ? lockMsg(wait) : `<div class="msg bad">That SPP doesn't match this card. ${triesLeft()} ${triesLeft() === 1 ? 'try' : 'tries'} left.</div>` };
+  }
+}
 const hasWallet = () => !!card.saved;
 async function loadMe() {
   if (!card.saved || !status) return null;
@@ -161,44 +184,16 @@ function withSpp(what, fn) {
   return new Promise(resolve => {
     const dlg = $('#sppdlg'), input = $('#spp-in'), msg = $('#spp-msg'), ok = $('#spp-ok');
     $('#spp-what').innerHTML = what;
-    input.value = ''; msg.innerHTML = ''; ok.disabled = false; ok.textContent = 'Confirm';
+    input.value = ''; msg.innerHTML = lockLeft() ? lockMsg(lockLeft()) : ''; ok.disabled = false; ok.textContent = 'Confirm';
     dlg.showModal(); input.focus();
-    const find = $('#spp-find'), found = $('#spp-found'), pinIn = $('#spp-pin'), reveal = $('#spp-reveal');
-    find.hidden = true; found.innerHTML = '';
-    $('#spp-show').onclick = () => { find.hidden = false; pinIn.value = ''; pinIn.focus(); };
-    pinIn.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); reveal.click(); } };
-    reveal.onclick = async () => {
-      const wait = (card.lockUntil || 0) - Date.now();
-      if (wait > 0) return void (found.innerHTML = `<div class="msg bad">Too many wrong tries. Wait ${Math.ceil(wait / 1000)} seconds.</div>`);
-      const h = await X.pinHash(pinIn.value, card.saved.pin.salt);
-      if (h.hash !== card.saved.pin.hash) {
-        card.fails = (card.fails || 0) + 1;
-        if (card.fails >= 5) card.lockUntil = Date.now() + 30_000 * (card.fails - 4);
-        return void (found.innerHTML = `<div class="msg bad">Wrong PIN.</div>`);
-      }
-      card.fails = 0;
-      reveal.disabled = true;
-      try {
-        let spp = null;
-        if (card.saved.sppBox) { try { spp = await X.unlockSpp(card.saved.sppBox, pinIn.value); } catch {} }
-        if (!spp) {
-          found.innerHTML = `<div style="display:grid;gap:6px"><span class="muted">Looking it up. This can take up to a minute.</span><div class="progress"><i id="spp-bar" style="width:0%"></i></div></div>`;
-          spp = await X.findSpp(card.saved.box, pinIn.value, p => { const b = $('#spp-bar'); if (b) b.style.width = Math.round(p * 100) + '%'; });
-          if (spp) { card.saved.sppBox = await X.lockSpp(spp, pinIn.value); store.set('card', card.saved); }
-        }
-        if (!spp) return void (found.innerHTML = `<div class="msg warn">This card was made before 3-digit SPPs, so it can’t be looked up. Use your 12 words instead.</div>`);
-        found.innerHTML = `<div class="msg"><span class="muted">Your SPP is</span> <b style="font:800 34px var(--display);letter-spacing:.1em">${esc(spp)}</b></div>`;
-        input.value = spp; msg.innerHTML = '';
-      } finally { reveal.disabled = false; }
-    };
     $('#spp-forgot').onclick = () => { dlg.close(); resolve(null); card.recover = true; location.hash = '#wallet'; renderWallet(); };
     $('#sppform').onsubmit = async e => {
       if (e.submitter?.value !== 'ok') { resolve(null); return; }
       e.preventDefault();
-      let keys;
       ok.disabled = true; ok.textContent = 'Checking…';
-      try { keys = X.keysFromEntropy(await X.unlockEntropy(card.saved.box, card.pin, input.value)); }
-      catch { msg.innerHTML = `<div class="msg bad">That SPP doesn't match this card. It's the 3-digit code on the back of your card. Forgot it? Use “Get it back with your 12 words” above.</div>`; ok.disabled = false; ok.textContent = 'Confirm'; return; }
+      const chk = await checkSpp(input.value);
+      if (!chk.keys) { msg.innerHTML = chk.html; ok.disabled = false; ok.textContent = 'Confirm'; return; }
+      const keys = chk.keys;
       const progress = p => { msg.innerHTML = `<div style="display:grid;gap:6px"><span class="muted">Doing a second of work instead of a fee…</span><div class="progress"><i style="width:${Math.round(p * 100)}%"></i></div></div>`; };
       progress(0.02);
       try { const r = await fn(keys, progress); dlg.close(); resolve(r); }
@@ -227,13 +222,14 @@ function renderWallet() {
   }
   if (card.importing || card.importError) return importScreen(root);
   if (!hasWallet() || card.recover) return setupStart(root);
-  if (!card.unlocked) return pinScreen(root);
+  if (card.saved.pin || card.saved.box.v !== 2) return legacyScreen(root);
+  if (!card.unlocked) return sppScreen(root);
   walletMain(root);
 }
 
 function setupStart(root) {
-  root.innerHTML = `<div class="page-head"><h2>${card.recover ? 'Forgot your PIN or SPP?' : 'Get your Cinder card.'}</h2>
-    <p class="lede">${card.recover ? 'Type your 12 backup words and choose a new PIN. You get back in, and your SPP is shown again. Your card ID and balance don’t change.' : 'Your card lives on this device. You choose a PIN; the card comes with a 3-digit SPP for payments and 12 backup words in case you lose the device.'}</p>
+  root.innerHTML = `<div class="page-head"><h2>${card.recover ? 'Forgot your SPP?' : 'Get your Cinder card.'}</h2>
+    <p class="lede">${card.recover ? 'Type your 12 backup words. You get back in, and your SPP is shown again. Your card ID and balance don’t change.' : 'Your card lives on this device. It comes with a 3-digit SPP that opens it and confirms payments, and 12 backup words in case you lose the device.'}</p>
     ${card.intent ? `<div class="msg warn" style="display:grid;gap:10px">A shop asked you to pay ${fmtCndr(card.intent.amount)} CDR.
       ${isAndroid ? `<span>Have Cinder Wallet on this phone? Pay with it. Otherwise make a card here, or bring yours back with your 12 words.</span>
       <div class="row"><a class="btn hi sm" href="${esc(appPayLink(card.intent))}">Pay with Cinder Wallet</a><a class="btn ghost sm" href="phone/#wallet">Get the app</a></div>`
@@ -242,40 +238,34 @@ function setupStart(root) {
       <div class="row"><button class="btn ghost sm" type="button" data-copy-req>Copy request</button></div>` : ''}`}</div>` : ''}</div>
     <div class="cols">
       ${card.recover ? '' : `<form class="panel heavy" id="new-card"><h3>Make a new card</h3>
-        <label class="f" for="pin1">Choose a 6-digit PIN<input id="pin1" class="pin" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="new-password"></label>
-        <label class="f" for="pin2">Same PIN again<input id="pin2" class="pin" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="new-password"></label>
+        <p class="muted">One tap. You get a 3-digit SPP and 12 backup words to write down.</p>
         <div id="new-msg"></div><div><button class="btn hi" type="submit">Make my card</button></div></form>`}
       <form class="panel${card.recover ? ' heavy' : ''}" id="restore-card"><h3>Bring back a card</h3>
         <label class="f" for="words">Your 12 backup words<textarea id="words" rows="3" required spellcheck="false" autocapitalize="none" style="font:16px var(--mono);padding:12px;border:1.5px solid var(--mortar);background:var(--concrete);color:var(--ink)"></textarea></label>
-        <label class="f" for="rpin">Choose a 6-digit PIN for this device<input id="rpin" class="pin" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="new-password"></label>
         <div id="restore-msg"></div><div><button class="btn" type="submit">Restore card</button></div>
-        <p class="muted" style="font-size:14px">Your SPP comes back too: it's worked out from the words. (A card made before 3-digit SPPs gets a new 3-digit one.)</p>
+        <p class="muted" style="font-size:14px">Your SPP comes back too: it's worked out from the words. </p>
         ${card.recover ? `<div><button class="btn ghost sm" type="button" id="recover-cancel">Never mind</button></div>` : ''}</form>
     </div>`;
   const rc = $('#recover-cancel'); if (rc) rc.onclick = () => { card.recover = false; renderWallet(); };
   if ($('#new-card')) $('#new-card').onsubmit = e => {
     e.preventDefault();
-    const a = $('#pin1').value, b = $('#pin2').value;
-    if (!/^\d{6}$/.test(a)) return void ($('#new-msg').innerHTML = `<div class="msg bad">The PIN is exactly 6 digits.</div>`);
-    if (a !== b) return void ($('#new-msg').innerHTML = `<div class="msg bad">The two PINs don't match.</div>`);
-    setupReveal(root, X.newEntropy(), a, true);
+    setupReveal(root, X.newEntropy(), true);
   };
   $('#restore-card').onsubmit = e => {
     e.preventDefault();
     let ent;
     try { ent = X.entropyFromPhrase($('#words').value); } catch (err) { return void ($('#restore-msg').innerHTML = `<div class="msg bad">${esc(err.message)}</div>`); }
-    if (!/^\d{6}$/.test($('#rpin').value)) return void ($('#restore-msg').innerHTML = `<div class="msg bad">The PIN is exactly 6 digits.</div>`);
     if (card.recover && card.saved && X.keysFromEntropy(ent).id !== card.saved.id)
       return void ($('#restore-msg').innerHTML = `<div class="msg bad">Those words belong to a different card, not ${formatId(card.saved.id)}. Your saved card is unchanged.</div>`);
-    setupReveal(root, ent, $('#rpin').value, false);
+    setupReveal(root, ent, false);
   };
 }
 
-function setupReveal(root, entropy, pin, isNew) {
+function setupReveal(root, entropy, isNew) {
   const keys = X.keysFromEntropy(entropy), spp = X.sppFromEntropy(entropy);
   const words = X.phraseFromEntropy(entropy);
   root.innerHTML = `<div class="page-head"><h2>${isNew ? 'This is your card.' : 'Your card is back.'}</h2>
-    <p class="lede">${isNew ? 'Write down your 3-digit SPP and the 12 words.' : 'Your SPP is below.'} If you ever forget your PIN or SPP, your 12 words bring them back.</p></div>
+    <p class="lede">${isNew ? 'Write down your 3-digit SPP and the 12 words.' : 'Your SPP is below.'} If you ever forget your SPP, your 12 words bring it back.</p></div>
     <div class="cols">
       <div style="display:grid;gap:14px">${cardFront(keys.id, 'Testnet')}${cardBack(spp)}</div>
       <div class="panel heavy">
@@ -291,9 +281,10 @@ function setupReveal(root, entropy, pin, isNew) {
   $('#finish').onclick = async () => {
     const btn = $('#finish'), msg = $('#reg-msg');
     btn.disabled = true;
-    card.saved = { id: keys.id, pub: keys.pub, pin: await X.pinHash(pin), box: await X.lockEntropy(entropy, pin, spp), sppBox: await X.lockSpp(spp, pin) };
+    card.saved = { id: keys.id, pub: keys.pub, box: await X.lockEntropy(entropy, spp) };
     store.set('card', card.saved);
-    Object.assign(card, { unlocked: true, pin, recover: false });
+    Object.assign(card, { unlocked: true, spp, recover: false });
+    store.del('lock');
     try {
       const me = await api('/api/id/' + keys.id);
       if (!me.registered && !me.registering) {
@@ -308,39 +299,76 @@ function setupReveal(root, entropy, pin, isNew) {
   };
 }
 
-function pinScreen(root) {
+function sppScreen(root) {
   root.innerHTML = `<div class="page-head"><h2>Unlock your card.</h2>
     ${card.intent ? `<p class="lede">Unlock to pay ${fmtCndr(card.intent.amount)} CDR to the shop.</p>` : ''}</div>
     <form class="cols" id="unlock">
       ${cardFront(card.saved.id, 'Locked')}
       <div class="panel heavy">
-        <label class="f" for="upin">PIN<input id="upin" class="pin" inputmode="numeric" maxlength="6" required autocomplete="current-password"></label>
-        <div id="umsg"></div>
+        <label class="f" for="uspp">SPP <span class="hint">The 3-digit code on the back of your card.</span><input id="uspp" class="pin" inputmode="numeric" maxlength="3" required autocomplete="off"></label>
+        <div id="umsg">${lockLeft() ? lockMsg(lockLeft()) : ''}</div>
         <div class="row"><button class="btn hi" type="submit">Unlock</button><button class="btn ghost sm" type="button" id="forget">Remove from this device</button></div>
-        <p class="muted" style="font-size:14px">Forgot your PIN? <button type="button" class="linkbtn" id="forgot-pin">Get back in with your 12 words</button>. Your card and balance stay as they are.</p>
+        <p class="muted" style="font-size:14px">Forgot your SPP? <button type="button" class="linkbtn" id="forgot-spp">Get back in with your 12 words</button>. Your card and balance stay as they are.</p>
       </div></form>`;
-  $('#upin').focus();
+  $('#uspp').focus();
   $('#unlock').onsubmit = async e => {
     e.preventDefault();
-    const pin = $('#upin').value;
-    const wait = (card.lockUntil || 0) - Date.now();
-    if (wait > 0) return void ($('#umsg').innerHTML = `<div class="msg bad">Too many wrong tries. Wait ${Math.ceil(wait / 1000)} seconds.</div>`);
-    const h = await X.pinHash(pin, card.saved.pin.salt);
-    if (h.hash !== card.saved.pin.hash) {
-      card.fails = (card.fails || 0) + 1;
-      if (card.fails >= 5) { card.lockUntil = Date.now() + 30_000 * (card.fails - 4); }
-      return void ($('#umsg').innerHTML = `<div class="msg bad">Wrong PIN.</div>`);
-    }
-    card.fails = 0;
-    Object.assign(card, { unlocked: true, pin });
+    const btn = e.submitter; btn.disabled = true;
+    const chk = await checkSpp($('#uspp').value);
+    btn.disabled = false;
+    if (!chk.keys) { $('#umsg').innerHTML = chk.html; $('#uspp').value = ''; return; }
+    Object.assign(card, { unlocked: true, spp: X.sppFromEntropy(chk.entropy) });
     await loadMe();
     renderWallet();
   };
   $('#forget').onclick = () => confirmForget($('#umsg'));
-  $('#forgot-pin').onclick = () => { card.recover = true; renderWallet(); };
+  $('#forgot-spp').onclick = () => { card.recover = true; renderWallet(); };
 }
 
-// A card arriving from the app: pick a PIN for this browser and it's the same card, same SPP.
+// A card saved when a 6-digit PIN was still part of it. Type the PIN once and it becomes an SPP-only card.
+function legacyScreen(root) {
+  root.innerHTML = `<div class="page-head"><h2>Update your card.</h2>
+    <p class="lede">Cinder no longer uses a PIN. Type your old 6-digit PIN one last time and your card opens with just its 3-digit SPP from now on. Lost the PIN? Use your 12 words.</p></div>
+    <form class="cols" id="legacy">
+      ${cardFront(card.saved.id, 'Update')}
+      <div class="panel heavy">
+        <label class="f" for="opin">Old PIN<input id="opin" class="pin" inputmode="numeric" maxlength="6" required autocomplete="off"></label>
+        <div id="lmsg"></div>
+        <div class="row"><button class="btn hi" type="submit">Update card</button><button class="btn ghost sm" type="button" id="forget">Remove from this device</button></div>
+        <p class="muted" style="font-size:14px"><button type="button" class="linkbtn" id="forgot-spp">Use my 12 words instead</button></p>
+      </div></form>`;
+  $('#opin').focus();
+  $('#legacy').onsubmit = async e => {
+    e.preventDefault();
+    const btn = e.submitter; btn.disabled = true;
+    const left = lockLeft();
+    if (left) { btn.disabled = false; return void ($('#lmsg').innerHTML = lockMsg(left)); }
+    const pin = $('#opin').value;
+    try {
+      $('#lmsg').innerHTML = `<span class="muted">Checking…</span>`;
+      let spp = null;
+      if (card.saved.sppBox) { try { spp = await X.unlockSppLegacy(card.saved.sppBox, pin); } catch {} }
+      if (!spp && !card.saved.sppBox) {
+        $('#lmsg').innerHTML = `<div style="display:grid;gap:6px"><span class="muted">Working out your SPP. This can take up to a minute.</span><div class="progress"><i id="lbar" style="width:0%"></i></div></div>`;
+        spp = await X.findSppLegacy(card.saved.box, pin, p => { const b = $('#lbar'); if (b) b.style.width = Math.round(p * 100) + '%'; });
+      }
+      if (!spp) {
+        const wait = sppWrong();
+        return void ($('#lmsg').innerHTML = wait ? lockMsg(wait) : `<div class="msg bad">That isn’t the PIN for this card. ${triesLeft()} ${triesLeft() === 1 ? 'try' : 'tries'} left.</div>`);
+      }
+      const entropy = await X.unlockEntropyLegacy(card.saved.box, pin, spp);
+      card.saved = { id: card.saved.id, pub: card.saved.pub, box: await X.lockEntropy(entropy, X.sppFromEntropy(entropy)) };
+      store.set('card', card.saved); store.del('lock');
+      Object.assign(card, { unlocked: true, spp: X.sppFromEntropy(entropy) });
+      await loadMe(); renderWallet();
+    } catch { $('#lmsg').innerHTML = `<div class="msg bad">Couldn’t update this card. Use your 12 words instead.</div>`; }
+    finally { btn.disabled = false; }
+  };
+  $('#forget').onclick = () => confirmForget($('#lmsg'));
+  $('#forgot-spp').onclick = () => { card.recover = true; renderWallet(); };
+}
+
+// A card arriving from the app: it's the same card, same SPP.
 function importScreen(root) {
   if (card.importError) {
     card.importError = false;
@@ -350,7 +378,7 @@ function importScreen(root) {
   const ent = card.importing, id = X.keysFromEntropy(ent).id;
   if (card.saved && card.saved.id === id) {
     card.importing = null;
-    root.innerHTML = `<div class="page-head"><h2>This card is already here.</h2><p class="lede">${formatId(id)} is saved on this browser. Unlock it with your PIN.</p><div><a class="btn hi" href="#wallet" id="imp-ok">Go to my card</a></div></div>`;
+    root.innerHTML = `<div class="page-head"><h2>This card is already here.</h2><p class="lede">${formatId(id)} is saved on this browser. Unlock it with your SPP.</p><div><a class="btn hi" href="#wallet" id="imp-ok">Go to my card</a></div></div>`;
     $('#imp-ok').onclick = e => { e.preventDefault(); renderWallet(); };
     return;
   }
@@ -359,25 +387,21 @@ function importScreen(root) {
     <form class="cols" id="imp">
       ${cardFront(id, 'Moving here')}
       <div class="panel heavy">
-        <label class="f" for="ipin">Choose a 6-digit PIN for this browser<input id="ipin" class="pin" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="new-password"></label>
         <div id="imsg"></div>
         <div class="row"><button class="btn hi" type="submit">Add card</button><button class="btn ghost sm" type="button" id="icancel">Cancel</button></div>
       </div></form>`;
-  $('#ipin').focus();
   $('#icancel').onclick = () => { card.importing = null; renderWallet(); };
   $('#imp').onsubmit = e => {
     e.preventDefault();
-    const pin = $('#ipin').value;
-    if (!/^\d{6}$/.test(pin)) return void ($('#imsg').innerHTML = `<div class="msg bad">The PIN is exactly 6 digits.</div>`);
     card.importing = null;
-    setupReveal(root, ent, pin, false);
+    setupReveal(root, ent, false);
   };
 }
 
 // Show the 12 words as a link and a QR code, for opening the same card in the app (or another browser).
 async function transferPanel(slot) {
   const words = await withSpp('Moving your card to another device shows your 12 words. Anyone who scans this can spend your CDR.', async () => {
-    return X.phraseFromEntropy(await X.unlockEntropy(card.saved.box, card.pin, $('#spp-in').value));
+    return X.phraseFromEntropy(await X.unlockEntropy(card.saved.box, $('#spp-in').value));
   });
   if (!words) return;
   const joined = words.join('.');
@@ -395,7 +419,7 @@ async function transferPanel(slot) {
 function confirmForget(slot) {
   slot.innerHTML = `<div class="msg warn" style="display:grid;gap:10px">This removes the card from this device. Without your 12 backup words, the CDR on it is gone for good.
     <div><button class="btn sm" type="button" id="forget-yes">Remove it</button></div></div>`;
-  $('#forget-yes').onclick = () => { store.del('card'); Object.assign(card, { saved: null, unlocked: false, pin: null, me: null }); renderWallet(); };
+  $('#forget-yes').onclick = () => { store.del('card'); Object.assign(card, { saved: null, unlocked: false, spp: null, me: null }); renderWallet(); };
 }
 
 function walletMain(root) {
@@ -450,17 +474,6 @@ function walletMain(root) {
     }
     btn.disabled = true;
     try {
-      if (!card.spp || card.sppFor !== card.saved.id) {
-        let spp = null;
-        if (card.saved.sppBox) { try { spp = await X.unlockSpp(card.saved.sppBox, card.pin); } catch {} }
-        if (!spp) {
-          btn.textContent = 'Looking it up…';
-          spp = await X.findSpp(card.saved.box, card.pin);
-          if (spp) { card.saved.sppBox = await X.lockSpp(spp, card.pin); store.set('card', card.saved); }
-        }
-        if (!spp) { note.innerHTML = `<div class="msg warn">This card was made before 3-digit SPPs, so it can’t be shown here. Restore it from your 12 words to get one.</div>`; btn.textContent = 'Show SPP'; return; }
-        card.spp = spp; card.sppFor = card.saved.id;
-      }
       slot.innerHTML = cardBack(card.spp); slot.dataset.side = 'back'; btn.textContent = 'Hide SPP';
       flipTimer = setTimeout(() => { if (slot.dataset.side === 'back') flipCard(); }, 30_000);
     } finally { btn.disabled = false; }
@@ -468,7 +481,7 @@ function walletMain(root) {
   $('#w-flip').onclick = flipCard;
   $('#w-cardslot').onclick = flipCard;
   $('#w-cardslot').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flipCard(); } };
-  $('#w-lock').onclick = () => { Object.assign(card, { unlocked: false, pin: null, spp: null }); renderWallet(); };
+  $('#w-lock').onclick = () => { Object.assign(card, { unlocked: false, spp: null }); renderWallet(); };
   $('#w-rm').onclick = () => confirmForget($('#w-foot'));
   $('#w-xfer').onclick = () => transferPanel($('#w-foot'));
   $('#w-net').onclick = () => { $('#nodeurl').value = API || ''; $('#nodedlg').showModal(); };
@@ -487,7 +500,7 @@ function walletMain(root) {
   };
   $('#w-words').onclick = async () => {
     const words = await withSpp('Your SPP unlocks the backup words.', async () => {
-      const ent = await X.unlockEntropy(card.saved.box, card.pin, $('#spp-in').value);
+      const ent = await X.unlockEntropy(card.saved.box, $('#spp-in').value);
       return X.phraseFromEntropy(ent);
     });
     if (words) $('#w-foot').innerHTML = `<div class="panel" style="gap:12px"><b>Your 12 backup words</b><ol class="phrase">${words.map(w => `<li>${w}</li>`).join('')}</ol><div><button class="btn sm" type="button" onclick="this.closest('.panel').remove()">Hide</button></div></div>`;

@@ -18,7 +18,7 @@ import javax.crypto.spec.PBEKeySpec
  * The card on this phone. The backup words and SPP are locked with a key
  * that lives in the phone's secure hardware, so the files alone are useless.
  * Payments are confirmed with your fingerprint, face or screen lock (or the
- * card PIN on phones without one).
+ * 3-digit SPP on phones without one). Three wrong SPPs in a row lock it for five minutes.
  */
 class Wallet(context: Context) {
     private val ctx = context.applicationContext
@@ -33,16 +33,13 @@ class Wallet(context: Context) {
     val words: List<String> by lazy { ctx.assets.open("words.txt").bufferedReader().readLines().filter { it.isNotBlank() } }
 
     // ------------------------------------------------------------- making a card
-    fun create(entropy: ByteArray, pin: String): String {
+    fun create(entropy: ByteArray): String {
         val spp = sppFromEntropy(entropy)
         val keys = Core.keysFromEntropy(entropy)
-        val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         p.edit()
             .putString("entropy", seal(entropy))
             .putString("spp", seal(spp.toByteArray()))
             .putString("id", keys.id)
-            .putString("pin_salt", b64(salt))
-            .putString("pin_hash", b64(pinHash(pin, salt)))
             .apply()
         return spp
     }
@@ -52,9 +49,23 @@ class Wallet(context: Context) {
     fun keys() = Core.keysFromEntropy(open(p.getString("entropy", null)!!))
     fun phrase() = Core.phraseFromEntropy(open(p.getString("entropy", null)!!), words)
     fun spp() = String(open(p.getString("spp", null)!!))
-    fun checkPin(pin: String): Boolean {
-        val salt = unb64(p.getString("pin_salt", null) ?: return false)
-        return b64(pinHash(pin, salt)) == p.getString("pin_hash", null)
+
+    /** Seconds left on the lockout, 0 when the SPP can be tried. */
+    fun lockSeconds(): Long = maxOf(0L, (p.getLong("lock_until", 0) - System.currentTimeMillis() + 999) / 1000)
+
+    /** Checks a typed SPP. Null means right; otherwise what to tell the person. Three misses lock it for five minutes. */
+    fun trySpp(input: String): String? {
+        fun clock(s: Long) = "Too many wrong tries. Try again in %d:%02d.".format(s / 60, s % 60)
+        val left = lockSeconds()
+        if (left > 0) return clock(left)
+        if (input.trim() == spp()) { p.edit().putInt("fails", 0).putLong("lock_until", 0).apply(); return null }
+        val f = p.getInt("fails", 0) + 1
+        if (f >= 3) {
+            p.edit().putInt("fails", 0).putLong("lock_until", System.currentTimeMillis() + 5 * 60_000).apply()
+            return clock(lockSeconds())
+        }
+        p.edit().putInt("fails", f).apply()
+        return "Wrong SPP. ${3 - f} ${if (3 - f == 1) "try" else "tries"} left."
     }
 
     // ------------------------------------------------------------- the network
@@ -121,10 +132,6 @@ class Wallet(context: Context) {
         val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, hwKey(), GCMParameterSpec(128, unb64(iv))) }
         return c.doFinal(unb64(ct))
     }
-
-    private fun pinHash(pin: String, salt: ByteArray): ByteArray =
-        SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-            .generateSecret(PBEKeySpec(pin.toCharArray(), salt, 120_000, 256)).encoded
 
     private fun b64(b: ByteArray) = Base64.encodeToString(b, Base64.NO_WRAP)
     private fun unb64(s: String) = Base64.decode(s, Base64.NO_WRAP)

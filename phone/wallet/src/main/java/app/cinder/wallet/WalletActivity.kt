@@ -82,9 +82,9 @@ class WalletActivity : Activity() {
             wallet.hasCard && wallet.id == id -> Toast.makeText(this, "That card is already on this phone.", Toast.LENGTH_LONG).show()
             wallet.hasCard -> AlertDialog.Builder(this).setTitle("Replace the card on this phone?")
                 .setMessage("This phone has ${Core.formatId(wallet.id)}. Adding ${Core.formatId(id)} removes it from here. Without its 12 words, the CDR on it is gone for good.")
-                .setPositiveButton("Replace") { _, _ -> Ui.askPin(this, wallet, "Enter your card PIN") { wallet.remove(); choosePin(ent) } }
+                .setPositiveButton("Replace") { _, _ -> Ui.askSpp(this, wallet, "Enter your SPP") { wallet.remove(); makeCard(ent) } }
                 .setNegativeButton("Cancel", null).show()
-            else -> choosePin(ent)
+            else -> makeCard(ent)
         }
     }
 
@@ -124,7 +124,7 @@ class WalletActivity : Activity() {
         body.addView(brand()); body.addView(gap(40))
         body.addView(big("Your Cinder card,\nin your pocket.", 40f))
         body.addView(text("Pay at shops by tapping your phone, pay online with one button, and send CDR to anyone's card.", Ui.DUST, 16f).apply { setPadding(0, dp(14), 0, dp(30)) })
-        body.addView(button("Make a new card", primary = true) { choosePin(null) })
+        body.addView(button("Make a new card", primary = true) { makeCard(null) })
         body.addView(button("I have backup words") { restore() })
     }
 
@@ -138,28 +138,15 @@ class WalletActivity : Activity() {
         body.addView(words)
         val msg = text("", Ui.BAD).also { body.addView(it) }
         body.addView(button("Next", primary = true) {
-            try { choosePin(Core.entropyFromPhrase(words.text.toString(), wallet.words)) }
+            try { makeCard(Core.entropyFromPhrase(words.text.toString(), wallet.words)) }
             catch (e: Exception) { msg.text = e.message }
         })
         body.addView(button("Back") { welcome() })
     }
 
-    private fun choosePin(restored: ByteArray?) {
-        clear()
-        body.addView(big("Choose a card PIN", 30f)); body.addView(gap(10))
-        body.addView(text("6 digits. You'll use it to see your backup words, and to pay on phones without a fingerprint or screen lock.", Ui.DUST))
-        val a = field("PIN", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD)
-        val b = field("Same PIN again", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD)
-        body.addView(a); body.addView(b)
-        val msg = text("", Ui.BAD).also { body.addView(it) }
-        body.addView(button(if (restored == null) "Make my card" else "Restore card", primary = true) {
-            val pin = a.text.toString()
-            if (!Regex("^\\d{6}$").matches(pin)) { msg.text = "The PIN is exactly 6 digits."; return@button }
-            if (pin != b.text.toString()) { msg.text = "The two PINs don't match."; return@button }
-            val entropy = restored ?: Wallet.newEntropy()
-            val spp = wallet.create(entropy, pin)
-            reveal(spp, restored == null)
-        })
+    private fun makeCard(restored: ByteArray?) {
+        val entropy = restored ?: Wallet.newEntropy()
+        reveal(wallet.create(entropy), restored == null)
     }
 
     private fun reveal(spp: String, isNew: Boolean) {
@@ -167,7 +154,7 @@ class WalletActivity : Activity() {
         body.addView(big(if (isNew) "This is your card." else "Your card is back.", 32f)); body.addView(gap(16))
         body.addView(card(wallet.id, "Testnet")); body.addView(gap(16))
         body.addView(rowOf(text("SPP  ", Ui.DUST), big(spp, 26f, Ui.HIVIS).apply { letterSpacing = 0.2f }))
-        body.addView(text("Your 3-digit payment code for the Cinder website. Forgot it later? It is in the backup words screen, and your 12 words bring it back. Payments in this app use your fingerprint instead.", Ui.DUST, 14f))
+        body.addView(text("Your 3-digit payment code. It confirms payments on phones without a fingerprint or screen lock, and opens your card on the Cinder website. Forgot it later? It is in the backup words screen, and your 12 words bring it back.", Ui.DUST, 14f))
         if (isNew) {
             body.addView(gap(20))
             body.addView(label("Your 12 backup words"))
@@ -373,7 +360,7 @@ class WalletActivity : Activity() {
     }
 
     private fun showWords() {
-        Ui.askPin(this, wallet, "Enter your card PIN") {
+        Ui.askSpp(this, wallet, "Enter your SPP") {
             AlertDialog.Builder(this).setTitle("Backup words")
                 .setMessage(wallet.phrase().mapIndexed { i, w -> "${i + 1}. $w" }.joinToString("\n") + "\n\nSPP: " + wallet.spp())
                 .setPositiveButton("Done", null).show()
@@ -401,7 +388,7 @@ class WalletActivity : Activity() {
     private fun removeCard() {
         AlertDialog.Builder(this).setTitle("Remove this card?")
             .setMessage("Without your 12 backup words, the CDR on it is gone for good.")
-            .setPositiveButton("Remove") { _, _ -> Ui.askPin(this, wallet, "Enter your card PIN") { wallet.remove(); welcome() } }
+            .setPositiveButton("Remove") { _, _ -> Ui.askSpp(this, wallet, "Enter your SPP") { wallet.remove(); welcome() } }
             .setNegativeButton("Cancel", null).show()
     }
 }

@@ -120,7 +120,7 @@ object Ui {
 
     /**
      * Confirms it's you before money moves: fingerprint, face or screen lock,
-     * like Apple Pay. Phones with none of those use the card PIN.
+     * like Apple Pay. Phones with none of those use the 3-digit SPP.
      */
     fun confirm(a: Activity, wallet: Wallet, title: String, subtitle: String, ok: () -> Unit) {
         val km = a.getSystemService(KeyguardManager::class.java)
@@ -137,22 +137,24 @@ object Ui {
                 @Suppress("DEPRECATION")
                 BiometricPrompt.Builder(a).setTitle(title).setSubtitle(subtitle).setDeviceCredentialAllowed(true)
                     .build().authenticate(CancellationSignal(), a.mainExecutor, cb)
-            else -> askPin(a, wallet, title, ok)
+            else -> askSpp(a, wallet, title, ok)
         }
     }
 
-    fun askPin(a: Activity, wallet: Wallet, title: String, ok: () -> Unit) {
+    fun askSpp(a: Activity, wallet: Wallet, title: String, ok: () -> Unit) {
         val input = EditText(a).apply {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
-            hint = "6-digit card PIN"; textSize = 22f; gravity = Gravity.CENTER
+            hint = "3-digit SPP"; textSize = 22f; gravity = Gravity.CENTER
+            filters = arrayOf(android.text.InputFilter.LengthFilter(3))
         }
         val d = AlertDialog.Builder(a).setTitle(title).setView(FrameLayout(a).apply {
             setPadding(a.dp(24), a.dp(8), a.dp(24), 0); addView(input)
         }).setPositiveButton("Confirm", null).setNegativeButton("Cancel", null).create()
         d.setOnShowListener {
             d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                if (wallet.checkPin(input.text.toString())) { d.dismiss(); ok() }
-                else { input.text.clear(); input.error = "Wrong PIN" }
+                val problem = wallet.trySpp(input.text.toString())
+                if (problem == null) { d.dismiss(); ok() }
+                else { input.text.clear(); input.error = problem }
             }
         }
         d.show()
